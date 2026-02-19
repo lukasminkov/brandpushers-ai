@@ -5,13 +5,14 @@ import { CheckCircle, XCircle, Clock } from 'lucide-react'
 
 interface Application {
   id: string
-  user_id: string
+  user_id: string | null
   name: string
+  email: string | null
   brand_stage: string
   answers: Record<string, string>
   status: string
   created_at: string
-  profiles?: { email: string; full_name: string }
+  profiles?: { email: string; full_name: string } | null
 }
 
 export default function AdminPage() {
@@ -58,9 +59,10 @@ export default function AdminPage() {
                     </span>
                   </div>
                   <p className="text-gray-400 text-sm">Stage: {app.brand_stage} • Applied: {new Date(app.created_at).toLocaleDateString()}</p>
-                  {app.profiles && <p className="text-gray-500 text-sm mt-1">{app.profiles.full_name} ({app.profiles.email})</p>}
-                  {app.answers?.description && <p className="text-gray-400 mt-3 text-sm">{app.answers.description}</p>}
-                  {app.answers?.goals && <p className="text-gray-500 mt-1 text-sm">Goals: {app.answers.goals}</p>}
+                  <p className="text-gray-500 text-sm mt-1">{app.email || app.profiles?.email || 'No email'}{app.profiles?.full_name ? ` • ${app.profiles.full_name}` : ''}</p>
+                  {app.answers?.brandName && <p className="text-gray-400 mt-3 text-sm">Brand: {app.answers.brandName}</p>}
+                  {app.answers?.category && <p className="text-gray-500 mt-1 text-sm">Category: {app.answers.category}</p>}
+                  {app.answers?.about && <p className="text-gray-500 mt-1 text-sm">About: {app.answers.about}</p>}
                 </div>
                 {app.status === 'pending' && (
                   <div className="flex gap-2 shrink-0">
