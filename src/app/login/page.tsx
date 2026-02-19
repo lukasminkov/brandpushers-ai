@@ -90,10 +90,10 @@ export default function LoginPage() {
               <div className="mb-8">
                 <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/[0.04] border border-white/[0.08] text-xs text-gray-400 mb-4">
                   <Clock size={11} className="text-[#F24822]" />
-                  Members &amp; applicants only
+                  Members only
                 </div>
                 <h1 className="text-2xl font-bold text-white mb-2">
-                  Already Applied?
+                  Members Area
                 </h1>
                 <p className="text-white/50 text-sm leading-relaxed">
                   Enter your email to receive a magic link. Check on your application status, or — if you&apos;ve been approved — access your member dashboard.

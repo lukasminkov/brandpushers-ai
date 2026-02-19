@@ -1,126 +1,148 @@
 'use client'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  CheckCircle, Circle, Building2, FileText, ChevronDown, ChevronRight,
-  BookOpen, Play, Link2
+  CheckCircle, Circle, Loader, Building2, FileText, PieChart,
+  User, X, Download, AlertTriangle, Pen, Lock
 } from 'lucide-react'
-import StepModal from '@/components/dashboard/StepModal'
 
-interface Phase {
+interface MemberPhase {
   id: string
-  title: string
-  description: string | null
-  banner_url: string | null
-  sort_order: number
-}
-
-interface Step {
-  id: string
-  phase_id: string
-  title: string
-  content: Record<string, unknown> | null
-  video_url: string | null
-  resource_links: Array<{ title: string; url: string; type: string }> | null
-  sort_order: number
+  status: string
+  notes: string | null
+  phases: { name: string; description: string; order: number }
 }
 
 interface Profile {
-  full_name: string | null
+  full_name: string
   brand_name: string | null
   equity_percentage: number | null
   fee_amount: number | null
   equity_agreed: boolean
 }
 
-interface StepProgress {
-  step_id: string
-  completed: boolean
+interface EquityStake {
+  id: string
+  stakeholder_name: string
+  stakeholder_type: 'individual' | 'company'
+  equity_percentage: number
 }
 
+interface EquityAgreement {
+  id: string
+  agreement_html: string
+  status: 'pending' | 'signed' | 'expired' | 'revoked'
+  sent_at: string
+  signed_at: string | null
+  signature_data: {
+    signer_name: string
+    timestamp: string
+  } | null
+}
+
+const COLORS = [
+  '#F24822', '#9B0EE5', '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4'
+]
+
 export default function DashboardPage() {
-  const [phases, setPhases] = useState<Phase[]>([])
-  const [steps, setSteps] = useState<Step[]>([])
-  const [progress, setProgress] = useState<StepProgress[]>([])
-  const [profile, setProfile] = useState<Profile | null>(null)
+  const [phases, setPhases] = useState<MemberPhase[]>([])
   const [loading, setLoading] = useState(true)
-  const [expandedPhases, setExpandedPhases] = useState<Set<string>>(new Set())
-  const [selectedStep, setSelectedStep] = useState<Step | null>(null)
-  const [togglingStep, setTogglingStep] = useState<string | null>(null)
-  const [userId, setUserId] = useState<string | null>(null)
+  const [profile, setProfile] = useState<Profile | null>(null)
+  const [stakes, setStakes] = useState<EquityStake[]>([])
+  const [agreements, setAgreements] = useState<EquityAgreement[]>([])
+
+  // Sign flow
+  const [signingAgreement, setSigningAgreement] = useState<EquityAgreement | null>(null)
+  const [signerName, setSignerName] = useState('')
+  const [consentChecked, setConsentChecked] = useState(false)
+  const [signing, setSigning] = useState(false)
+  const [signError, setSignError] = useState('')
+
+  // View signed agreement
+  const [viewingAgreement, setViewingAgreement] = useState<EquityAgreement | null>(null)
+
   const supabase = createClient()
 
-  const load = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-    setUserId(user.id)
+  useEffect(() => {
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
 
-    const [profileRes, phasesRes, stepsRes, progressRes] = await Promise.all([
-      supabase.from('profiles').select('full_name, brand_name, equity_percentage, fee_amount, equity_agreed').eq('id', user.id).single(),
-      supabase.from('phases').select('*').order('sort_order'),
-      supabase.from('phase_steps').select('*').order('sort_order'),
-      supabase.from('member_step_progress').select('step_id, completed').eq('user_id', user.id),
-    ])
+      const [
+        { data: p },
+        { data: phases },
+        { data: stakesData },
+        { data: agreementsData },
+      ] = await Promise.all([
+        supabase.from('profiles').select('full_name, brand_name, equity_percentage, fee_amount, equity_agreed').eq('id', user.id).single(),
+        supabase.from('member_phases').select('*, phases(name, description, order)').eq('member_id', user.id).order('phases(order)'),
+        supabase.from('equity_stakes').select('id, stakeholder_name, stakeholder_type, equity_percentage').eq('brand_member_id', user.id).order('equity_percentage', { ascending: false }),
+        supabase.from('equity_agreements').select('id, agreement_html, status, sent_at, signed_at, signature_data').eq('brand_member_id', user.id).order('created_at', { ascending: false }),
+      ])
 
-    setProfile(profileRes.data)
-    const phaseList = (phasesRes.data || []) as Phase[]
-    setPhases(phaseList)
-    setSteps((stepsRes.data || []) as Step[])
-    setProgress((progressRes.data || []) as StepProgress[])
-    // Auto-expand first phase
-    if (phaseList.length > 0) {
-      setExpandedPhases(new Set([phaseList[0].id]))
-    }
-    setLoading(false)
+      setProfile(p)
+      setPhases((phases || []) as MemberPhase[])
+      setStakes((stakesData || []) as EquityStake[])
+      setAgreements((agreementsData || []) as EquityAgreement[])
+      setLoading(false)
+    })()
   }, [supabase])
 
-  useEffect(() => { load() }, [load])
+  const completed = phases.filter(p => p.status === 'completed').length
+  const total = phases.length
+  const pct = total > 0 ? Math.round((completed / total) * 100) : 0
+  const totalEquity = stakes.reduce((s, e) => s + Number(e.equity_percentage), 0)
 
-  const isCompleted = (stepId: string) => progress.some(p => p.step_id === stepId && p.completed)
+  const pendingAgreement = agreements.find(a => a.status === 'pending')
+  const signedAgreements = agreements.filter(a => a.status === 'signed')
 
-  const toggleStep = async (step: Step) => {
-    if (!userId || togglingStep) return
-    setTogglingStep(step.id)
-    const wasCompleted = isCompleted(step.id)
-    const now = new Date().toISOString()
-
-    // Optimistic update
-    setProgress(prev => {
-      const existing = prev.find(p => p.step_id === step.id)
-      if (existing) {
-        return prev.map(p => p.step_id === step.id ? { ...p, completed: !wasCompleted } : p)
+  const handleSign = async () => {
+    if (!signingAgreement || !signerName || !consentChecked) return
+    setSigning(true)
+    setSignError('')
+    try {
+      const res = await fetch('/api/sign-agreement', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agreement_id: signingAgreement.id,
+          signer_name: signerName,
+          consent: 'I agree to the equity participation agreement and all terms therein.',
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setSignError(data.error || 'Failed to sign')
+        setSigning(false)
+        return
       }
-      return [...prev, { step_id: step.id, completed: true }]
-    })
-
-    await supabase.from('member_step_progress').upsert({
-      user_id: userId,
-      step_id: step.id,
-      completed: !wasCompleted,
-      completed_at: !wasCompleted ? now : null,
-    }, { onConflict: 'user_id,step_id' })
-
-    setTogglingStep(null)
+      // Refresh agreements
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const { data: updated } = await supabase
+          .from('equity_agreements')
+          .select('id, agreement_html, status, sent_at, signed_at, signature_data')
+          .eq('brand_member_id', user.id)
+          .order('created_at', { ascending: false })
+        setAgreements((updated || []) as EquityAgreement[])
+      }
+      setSigningAgreement(null)
+      setSigning(false)
+    } catch {
+      setSignError('Network error. Please try again.')
+      setSigning(false)
+    }
   }
 
-  const phaseSteps = (phaseId: string) => steps.filter(s => s.phase_id === phaseId)
-  const phaseProgress = (phaseId: string) => {
-    const ps = phaseSteps(phaseId)
-    const done = ps.filter(s => isCompleted(s.id)).length
-    return { done, total: ps.length, pct: ps.length > 0 ? Math.round((done / ps.length) * 100) : 0 }
-  }
-
-  const totalCompleted = steps.filter(s => isCompleted(s.id)).length
-  const totalSteps = steps.length
-  const overallPct = totalSteps > 0 ? Math.round((totalCompleted / totalSteps) * 100) : 0
-
-  const togglePhase = (phaseId: string) => {
-    setExpandedPhases(prev => {
-      const next = new Set(prev)
-      if (next.has(phaseId)) { next.delete(phaseId) } else { next.add(phaseId) }
-      return next
-    })
+  const handleDownload = (agreement: EquityAgreement) => {
+    const blob = new Blob([agreement.agreement_html], { type: 'text/html' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `equity-agreement-${new Date(agreement.signed_at || agreement.sent_at).toISOString().slice(0, 10)}.html`
+    a.click()
+    URL.revokeObjectURL(url)
   }
 
   if (loading) return (
@@ -129,18 +151,172 @@ export default function DashboardPage() {
     </div>
   )
 
-  const hasEquityInfo = profile?.equity_percentage != null || profile?.brand_name
-
   return (
-    <div className="max-w-3xl mx-auto">
-      {/* Welcome */}
-      <h1 className="text-3xl font-bold mb-1">
-        Welcome back{profile?.full_name ? `, ${profile.full_name.split(' ')[0]}` : ''}!
+    <div>
+      <h1 className="text-3xl font-bold mb-2">
+        Welcome back{profile?.full_name ? `, ${profile.full_name}` : ''}!
       </h1>
-      <p className="text-gray-400 mb-8">Your brand-building journey continues below.</p>
+      <p className="text-gray-400 mb-8">Track your brand-building progress below.</p>
 
-      {/* Equity / Partnership Card */}
-      {hasEquityInfo && (
+      {/* ── EQUITY SECTION ── */}
+      {(stakes.length > 0 || pendingAgreement || signedAgreements.length > 0) && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-8"
+        >
+          <div className="flex items-center gap-2 mb-4">
+            <PieChart size={16} className="text-brand-orange" />
+            <h2 className="font-semibold text-lg">Equity Partnership</h2>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-4">
+            {/* Cap Table */}
+            {stakes.length > 0 && (
+              <div className="glass rounded-2xl p-5 border border-brand-purple/20">
+                <div className="flex items-center gap-2 mb-4">
+                  <Building2 size={15} className="text-brand-orange" />
+                  <h3 className="font-semibold text-sm">
+                    {profile?.brand_name || 'Your Brand'} — Cap Table
+                  </h3>
+                </div>
+
+                {/* Stacked bar */}
+                <div className="w-full h-5 bg-dark-700 rounded-full overflow-hidden flex mb-3">
+                  {stakes.map((s, i) => (
+                    <div
+                      key={s.id}
+                      style={{
+                        width: `${Math.min(s.equity_percentage, 100)}%`,
+                        background: COLORS[i % COLORS.length],
+                        transition: 'width 0.5s ease',
+                        minWidth: s.equity_percentage > 0 ? '2px' : 0,
+                      }}
+                      title={`${s.stakeholder_name}: ${s.equity_percentage}%`}
+                    />
+                  ))}
+                  {totalEquity < 100 && (
+                    <div style={{ flex: 1, background: 'rgba(255,255,255,0.05)' }} />
+                  )}
+                </div>
+
+                {/* Stakeholder list */}
+                <div className="space-y-2">
+                  {stakes.map((s, i) => (
+                    <div key={s.id} className="flex items-center gap-3">
+                      <div className="w-3 h-3 rounded-full shrink-0" style={{ background: COLORS[i % COLORS.length] }} />
+                      <div className="w-7 h-7 rounded-lg bg-white/5 flex items-center justify-center shrink-0">
+                        {s.stakeholder_type === 'company'
+                          ? <Building2 size={12} className="text-gray-400" />
+                          : <User size={12} className="text-gray-400" />
+                        }
+                      </div>
+                      <span className="text-sm flex-1">{s.stakeholder_name}</span>
+                      <span className="text-sm font-bold" style={{ color: COLORS[i % COLORS.length] }}>
+                        {s.equity_percentage}%
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-4 pt-3 border-t border-white/10 flex justify-between items-center">
+                  <span className="text-xs text-gray-500">Total allocated</span>
+                  <span className="text-sm font-bold text-white">{totalEquity.toFixed(2)}%</span>
+                </div>
+              </div>
+            )}
+
+            {/* Agreement Status */}
+            <div className="space-y-3">
+              {/* Pending agreement — Sign CTA */}
+              {pendingAgreement && (
+                <div className="glass rounded-2xl p-5 border border-yellow-500/30">
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-yellow-500/20 flex items-center justify-center shrink-0">
+                      <AlertTriangle size={18} className="text-yellow-400" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-sm mb-1">Signature Required</h3>
+                      <p className="text-gray-400 text-xs leading-relaxed mb-3">
+                        Your equity agreement is ready for review and signature. Please read and sign to confirm the ownership structure.
+                      </p>
+                      <p className="text-xs text-gray-500 mb-3">
+                        Sent: {new Date(pendingAgreement.sent_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setViewingAgreement(pendingAgreement)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-white/5 border border-white/10 text-gray-300 rounded-lg hover:bg-white/10 transition"
+                        >
+                          <FileText size={12} /> Preview
+                        </button>
+                        <button
+                          onClick={() => { setSigningAgreement(pendingAgreement); setSignerName(profile?.full_name || ''); setConsentChecked(false); setSignError('') }}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-brand-orange text-white rounded-lg hover:bg-brand-orange/80 transition font-medium"
+                        >
+                          <Pen size={12} /> Sign Agreement
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Signed agreements */}
+              {signedAgreements.map(a => (
+                <div key={a.id} className="glass rounded-2xl p-5 border border-green-500/20">
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-green-500/20 flex items-center justify-center shrink-0">
+                      <CheckCircle size={18} className="text-green-400" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-sm mb-1 text-green-400">Equity Agreement Signed</h3>
+                      <p className="text-xs text-gray-500 mb-1">
+                        Signed: {new Date(a.signed_at!).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+                      </p>
+                      {a.signature_data && (
+                        <p className="text-xs text-gray-500 mb-3">By: {a.signature_data.signer_name}</p>
+                      )}
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setViewingAgreement(a)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-white/5 border border-white/10 text-gray-300 rounded-lg hover:bg-white/10 transition"
+                        >
+                          <FileText size={12} /> View
+                        </button>
+                        <button
+                          onClick={() => handleDownload(a)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-green-500/10 border border-green-500/20 text-green-400 rounded-lg hover:bg-green-500/20 transition"
+                        >
+                          <Download size={12} /> Download
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              {/* No agreement yet */}
+              {!pendingAgreement && signedAgreements.length === 0 && stakes.length > 0 && (
+                <div className="glass rounded-2xl p-5 border border-white/10">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center shrink-0">
+                      <Lock size={18} className="text-gray-500" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-sm mb-1">Agreement Pending</h3>
+                      <p className="text-gray-500 text-xs">Your admin will send you an equity agreement to sign once the cap table is finalized.</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </motion.div>
+      )}
+
+      {/* Legacy equity card (if old-style data only) */}
+      {stakes.length === 0 && profile?.equity_percentage != null && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -152,32 +328,19 @@ export default function DashboardPage() {
             </div>
             <div className="flex-1">
               <h3 className="font-semibold text-white mb-1">Your Partnership with BrandPushers</h3>
-              {profile?.brand_name && <p className="text-brand-orange font-medium mb-2">{profile.brand_name}</p>}
+              {profile?.brand_name && (
+                <p className="text-brand-orange font-medium mb-2">{profile.brand_name}</p>
+              )}
               {profile?.equity_percentage != null && (
                 <div className="flex items-baseline gap-2 mb-3">
                   <span className="text-3xl font-bold text-white">{profile.equity_percentage}%</span>
                   <span className="text-gray-400 text-sm">BrandPushers equity stake</span>
                 </div>
               )}
-              {profile?.equity_percentage != null && (
-                <div className="rounded-xl bg-black/20 border border-white/10 p-4 mb-3">
-                  <div className="flex items-start gap-2">
-                    <FileText size={14} className="text-brand-orange mt-0.5 shrink-0" />
-                    <p className="text-sm text-gray-400 leading-relaxed">
-                      <strong className="text-white">BrandPushers (WHUT.AI LLC)</strong> holds{' '}
-                      <strong className="text-brand-orange">{profile.equity_percentage}%</strong> equity in{' '}
-                      <strong className="text-white">{profile.brand_name || 'your company'}</strong>.{' '}
-                      Ensure this is reflected in your operating agreement and cap table.
-                    </p>
-                  </div>
-                </div>
-              )}
-              {profile?.fee_amount != null && (
-                <p className="text-sm text-gray-500">Program fee: <span className="text-gray-300 font-medium">${profile.fee_amount.toLocaleString()} USD</span></p>
-              )}
               {profile?.equity_agreed && (
                 <div className="flex items-center gap-2 mt-2 text-green-400 text-sm">
-                  <CheckCircle size={14} /><span>Equity terms confirmed</span>
+                  <CheckCircle size={14} />
+                  <span>Equity terms confirmed</span>
                 </div>
               )}
             </div>
@@ -185,178 +348,227 @@ export default function DashboardPage() {
         </motion.div>
       )}
 
-      {/* Overall Progress */}
-      {totalSteps > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.05 }}
-          className="glass rounded-2xl p-6 mb-8"
-        >
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <h3 className="font-semibold">Overall Progress</h3>
-              <p className="text-gray-500 text-sm">{totalCompleted} of {totalSteps} steps completed</p>
-            </div>
-            <div className="text-right">
-              <span className="text-3xl font-bold bg-logo-gradient bg-clip-text text-transparent">{overallPct}%</span>
-            </div>
-          </div>
-          <div className="w-full h-3 bg-black/30 rounded-full overflow-hidden">
-            <motion.div
-              initial={{ width: 0 }}
-              animate={{ width: `${overallPct}%` }}
-              transition={{ duration: 1, ease: 'easeOut' }}
-              className="h-full bg-logo-gradient rounded-full"
-            />
-          </div>
-        </motion.div>
-      )}
-
-      {/* Phases */}
-      {phases.length === 0 ? (
-        <div className="glass rounded-2xl p-12 text-center text-gray-500">
-          <BookOpen size={40} className="mx-auto mb-3 opacity-30" />
-          <p>No phases published yet. Check back soon!</p>
+      {/* Progress bar */}
+      <div className="glass rounded-2xl p-6 mb-8">
+        <div className="flex justify-between items-center mb-3">
+          <h3 className="font-semibold">Overall Progress</h3>
+          <span className="text-brand-orange font-bold">{pct}%</span>
         </div>
-      ) : (
-        <div className="space-y-4">
-          {phases.map((phase, phaseIdx) => {
-            const { done, total, pct } = phaseProgress(phase.id)
-            const isExpanded = expandedPhases.has(phase.id)
-            const ps = phaseSteps(phase.id)
-            const isPhaseComplete = total > 0 && done === total
+        <div className="w-full h-3 bg-dark-700 rounded-full overflow-hidden">
+          <motion.div
+            initial={{ width: 0 }}
+            animate={{ width: `${pct}%` }}
+            transition={{ duration: 1 }}
+            className="h-full bg-logo-gradient rounded-full"
+          />
+        </div>
+        <p className="text-gray-500 text-sm mt-2">{completed} of {total} phases completed</p>
+      </div>
 
-            return (
-              <motion.div
-                key={phase.id}
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: phaseIdx * 0.06 }}
-                className={`glass rounded-2xl overflow-hidden border transition-colors ${isPhaseComplete ? 'border-green-500/30' : 'border-white/10'}`}
-              >
-                {/* Phase Banner */}
-                {phase.banner_url && (
-                  <div className="h-32 overflow-hidden relative">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={phase.banner_url} alt={phase.title} className="w-full h-full object-cover" />
-                    <div className="absolute inset-0 bg-gradient-to-b from-transparent to-[#0A0A0A]/80" />
+      {/* Phase list */}
+      <div className="space-y-3">
+        {phases.map((mp, i) => (
+          <motion.div
+            key={mp.id}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.05 }}
+            className="glass rounded-xl p-5 flex items-center gap-4"
+          >
+            <div className="shrink-0">
+              {mp.status === 'completed' ? (
+                <CheckCircle className="text-green-400" size={24} />
+              ) : mp.status === 'in_progress' ? (
+                <Loader className="text-blue-400 animate-spin" size={24} />
+              ) : (
+                <Circle className="text-gray-600" size={24} />
+              )}
+            </div>
+            <div className="flex-1">
+              <h4 className="font-semibold">{mp.phases.name}</h4>
+              {mp.phases.description && (
+                <p className="text-gray-500 text-sm">{mp.phases.description}</p>
+              )}
+              {mp.notes && (
+                <p className="text-gray-400 text-sm mt-1 italic">{mp.notes}</p>
+              )}
+            </div>
+            <span className={`text-xs px-3 py-1 rounded-full ${
+              mp.status === 'completed'
+                ? 'bg-green-500/20 text-green-400'
+                : mp.status === 'in_progress'
+                ? 'bg-blue-500/20 text-blue-400'
+                : 'bg-gray-500/20 text-gray-400'
+            }`}>
+              {mp.status.replace('_', ' ')}
+            </span>
+          </motion.div>
+        ))}
+
+        {phases.length === 0 && (
+          <div className="glass rounded-2xl p-12 text-center text-gray-500">
+            No phases assigned yet. Your admin will set up your program phases soon.
+          </div>
+        )}
+      </div>
+
+      {/* ── SIGN AGREEMENT MODAL ── */}
+      <AnimatePresence>
+        {signingAgreement && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-start justify-center p-4 overflow-y-auto"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="w-full max-w-2xl my-8"
+            >
+              {/* Agreement content */}
+              <div className="bg-white rounded-2xl overflow-hidden shadow-2xl mb-4">
+                <div className="bg-dark-800 border-b border-white/10 p-4 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <FileText size={16} className="text-brand-orange" />
+                    <span className="font-semibold text-sm">Equity Agreement</span>
+                  </div>
+                  <button onClick={() => setSigningAgreement(null)} className="text-gray-500 hover:text-white transition">
+                    <X size={18} />
+                  </button>
+                </div>
+                <div
+                  className="max-h-96 overflow-y-auto p-2"
+                  dangerouslySetInnerHTML={{ __html: signingAgreement.agreement_html }}
+                />
+              </div>
+
+              {/* Signature panel */}
+              <div className="bg-dark-800 border border-white/10 rounded-2xl p-6">
+                <h3 className="font-bold mb-4 flex items-center gap-2">
+                  <Pen size={16} className="text-brand-orange" />
+                  Sign this Agreement
+                </h3>
+
+                {/* Consent checkbox */}
+                <label className="flex items-start gap-3 mb-5 cursor-pointer group">
+                  <div
+                    onClick={() => setConsentChecked(p => !p)}
+                    className={`w-5 h-5 rounded border-2 shrink-0 mt-0.5 flex items-center justify-center transition-all ${
+                      consentChecked ? 'bg-brand-orange border-brand-orange' : 'border-white/30 bg-transparent'
+                    }`}
+                  >
+                    {consentChecked && <CheckCircle size={12} className="text-white" />}
+                  </div>
+                  <span className="text-sm text-gray-300 leading-relaxed group-hover:text-white transition">
+                    I have read and understood the equity participation agreement above. I agree to be legally bound by its terms,
+                    and I acknowledge that my electronic signature is valid under the U.S. ESIGN Act and applicable state law.
+                  </span>
+                </label>
+
+                {/* Full name */}
+                <div className="mb-5">
+                  <label className="block text-xs text-gray-500 mb-2">
+                    Type your full legal name to sign *
+                  </label>
+                  <input
+                    type="text"
+                    value={signerName}
+                    onChange={e => setSignerName(e.target.value)}
+                    placeholder="e.g. Jane Elizabeth Smith"
+                    className="w-full bg-dark-700 border border-white/10 rounded-lg px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-brand-orange font-medium transition"
+                    style={{ fontFamily: 'Georgia, serif' }}
+                  />
+                  <p className="text-xs text-gray-600 mt-1">
+                    This constitutes your electronic signature.
+                  </p>
+                </div>
+
+                {signError && (
+                  <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm flex items-center gap-2">
+                    <AlertTriangle size={14} /> {signError}
                   </div>
                 )}
 
-                {/* Phase Header */}
-                <button
-                  onClick={() => togglePhase(phase.id)}
-                  className="w-full px-6 py-5 flex items-center gap-4 hover:bg-white/5 transition text-left"
-                >
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 font-bold text-sm ${isPhaseComplete ? 'bg-green-500/20 text-green-400' : 'bg-brand-orange/20 text-brand-orange'}`}>
-                    {isPhaseComplete ? <CheckCircle size={18} /> : phaseIdx + 1}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-bold text-white">{phase.title}</h3>
-                      {isPhaseComplete && (
-                        <span className="text-xs px-2 py-0.5 bg-green-500/20 text-green-400 rounded-full">Complete!</span>
-                      )}
-                    </div>
-                    {phase.description && (
-                      <p className="text-gray-500 text-sm mt-0.5 truncate">{phase.description}</p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setSigningAgreement(null)}
+                    className="flex-1 py-3 border border-white/10 text-gray-400 rounded-xl text-sm hover:text-white transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSign}
+                    disabled={signing || !signerName.trim() || !consentChecked}
+                    className="flex-1 py-3 bg-brand-orange text-white rounded-xl text-sm font-bold hover:bg-brand-orange/80 transition disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {signing ? (
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <Pen size={14} />
                     )}
-                    {/* Mini progress bar */}
-                    <div className="flex items-center gap-2 mt-2">
-                      <div className="flex-1 h-1.5 bg-black/30 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-logo-gradient rounded-full transition-all duration-500"
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                      <span className="text-xs text-gray-500 flex-shrink-0">{done}/{total}</span>
-                    </div>
-                  </div>
-                  <ChevronDown
-                    size={18}
-                    className={`text-gray-400 flex-shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-                  />
-                </button>
+                    {signing ? 'Signing…' : 'Sign Agreement'}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-                {/* Steps */}
-                <AnimatePresence>
-                  {isExpanded && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: 'auto', opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.2 }}
-                      className="overflow-hidden"
+      {/* ── VIEW AGREEMENT MODAL ── */}
+      <AnimatePresence>
+        {viewingAgreement && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-start justify-center p-4 overflow-y-auto"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-2xl w-full max-w-3xl my-8 overflow-hidden shadow-2xl"
+            >
+              <div className="bg-dark-800 border-b border-white/10 p-4 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <FileText size={16} className="text-brand-orange" />
+                  <span className="font-semibold text-sm">
+                    Equity Agreement
+                    {viewingAgreement.status === 'signed' && (
+                      <span className="ml-2 text-xs text-green-400 bg-green-500/20 px-2 py-0.5 rounded-full">Signed</span>
+                    )}
+                  </span>
+                </div>
+                <div className="flex gap-2">
+                  {viewingAgreement.status === 'signed' && (
+                    <button
+                      onClick={() => handleDownload(viewingAgreement)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-green-500/10 text-green-400 border border-green-500/20 rounded-lg hover:bg-green-500/20 transition"
                     >
-                      <div className="px-4 pb-4 space-y-1.5 border-t border-white/5 pt-3">
-                        {ps.length === 0 ? (
-                          <p className="text-sm text-gray-600 text-center py-4">No steps in this phase yet</p>
-                        ) : (
-                          ps.map((step, stepIdx) => {
-                            const done = isCompleted(step.id)
-                            const hasContent = step.content || step.video_url || (step.resource_links && step.resource_links.length > 0)
-                            return (
-                              <motion.div
-                                key={step.id}
-                                initial={{ opacity: 0, x: -8 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                transition={{ delay: stepIdx * 0.04 }}
-                                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition group ${done ? 'bg-green-500/5' : 'hover:bg-white/5'}`}
-                              >
-                                {/* Checkbox */}
-                                <button
-                                  onClick={() => toggleStep(step)}
-                                  disabled={togglingStep === step.id}
-                                  className={`flex-shrink-0 transition-transform ${togglingStep === step.id ? 'opacity-50' : 'hover:scale-110 active:scale-95'}`}
-                                >
-                                  {done ? (
-                                    <CheckCircle size={22} className="text-green-400" />
-                                  ) : (
-                                    <Circle size={22} className="text-gray-600 group-hover:text-gray-400 transition" />
-                                  )}
-                                </button>
-
-                                {/* Step info */}
-                                <div className="flex-1 min-w-0">
-                                  <span className={`text-sm font-medium ${done ? 'line-through text-gray-500' : 'text-white'}`}>
-                                    {step.title}
-                                  </span>
-                                  <div className="flex items-center gap-2 mt-0.5">
-                                    {step.video_url && <Play size={10} className="text-gray-600" />}
-                                    {step.resource_links && step.resource_links.length > 0 && <Link2 size={10} className="text-gray-600" />}
-                                    {step.video_url && <span className="text-xs text-gray-600">Video</span>}
-                                    {step.resource_links && step.resource_links.length > 0 && (
-                                      <span className="text-xs text-gray-600">{step.resource_links.length} resource{step.resource_links.length !== 1 ? 's' : ''}</span>
-                                    )}
-                                  </div>
-                                </div>
-
-                                {/* Open step button */}
-                                {hasContent && (
-                                  <button
-                                    onClick={() => setSelectedStep(step)}
-                                    className="flex-shrink-0 text-xs px-3 py-1.5 rounded-lg glass hover:bg-white/10 transition text-gray-400 hover:text-white flex items-center gap-1.5 opacity-0 group-hover:opacity-100"
-                                  >
-                                    <ChevronRight size={12} /> View
-                                  </button>
-                                )}
-                              </motion.div>
-                            )
-                          })
-                        )}
-                      </div>
-                    </motion.div>
+                      <Download size={12} /> Download
+                    </button>
                   )}
-                </AnimatePresence>
-              </motion.div>
-            )
-          })}
-        </div>
-      )}
-
-      {/* Step Modal */}
-      <StepModal step={selectedStep} onClose={() => setSelectedStep(null)} />
+                  {viewingAgreement.status === 'pending' && (
+                    <button
+                      onClick={() => { setSigningAgreement(viewingAgreement); setViewingAgreement(null); setSignerName(profile?.full_name || ''); setConsentChecked(false); setSignError('') }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-brand-orange text-white rounded-lg hover:bg-brand-orange/80 transition"
+                    >
+                      <Pen size={12} /> Sign
+                    </button>
+                  )}
+                  <button onClick={() => setViewingAgreement(null)} className="text-gray-500 hover:text-white transition">
+                    <X size={18} />
+                  </button>
+                </div>
+              </div>
+              <div dangerouslySetInnerHTML={{ __html: viewingAgreement.agreement_html }} />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

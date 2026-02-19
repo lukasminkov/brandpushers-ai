@@ -225,6 +225,61 @@ export default function TermsPage() {
             </ul>
           </section>
 
+          {/* 11.5 — Equity Agreement & Electronic Signatures */}
+          <section>
+            <h2 className="text-2xl font-bold text-white mb-4">11A. Equity Participation Agreements &amp; Electronic Signatures</h2>
+
+            <h3 className="text-lg font-semibold text-white mb-2">11A.1 Digital Equity Agreements</h3>
+            <p>
+              As part of the BrandPushers Accelerator Program, BrandPushers may issue an <strong className="text-white">Equity Participation Agreement</strong>{' '}
+              through the BrandPushers Platform. This agreement sets out the equity ownership structure for your brand, including all stakeholders and their respective
+              equity percentages (the "Cap Table"). You will be notified within the Platform when an equity agreement is available for your review and signature.
+            </p>
+            <p className="mt-4">
+              Each equity agreement will include: (a) your brand or company name; (b) the full Cap Table showing all stakeholders and their equity percentages;
+              (c) the date of the agreement; (d) standard equity terms referencing these Terms of Service; and (e) signature provisions for all parties.
+            </p>
+
+            <h3 className="text-lg font-semibold text-white mt-6 mb-2">11A.2 Electronic Signature Validity</h3>
+            <p>
+              BrandPushers uses an integrated electronic signature mechanism on the Platform. By typing your full legal name and clicking "Sign Agreement" on
+              the Platform, you acknowledge that your action constitutes a legally valid and binding <strong className="text-white">electronic signature</strong> under:
+            </p>
+            <ul className="list-disc list-inside mt-3 space-y-2 ml-4">
+              <li>The <strong className="text-white">U.S. Electronic Signatures in Global and National Commerce Act (ESIGN Act)</strong>, 15 U.S.C. § 7001 et seq.;</li>
+              <li>The <strong className="text-white">Uniform Electronic Transactions Act (UETA)</strong> as adopted by applicable states; and</li>
+              <li>Any other applicable electronic transactions or digital signature law in your jurisdiction.</li>
+            </ul>
+            <p className="mt-4">
+              Electronic signatures captured through the Platform carry the same legal weight and enforceability as traditional wet-ink signatures.
+              BrandPushers records the following data at the time of signing: your typed name, your IP address, the timestamp of signing,
+              and your explicit consent statement. This data constitutes an audit trail of your electronic signature.
+            </p>
+
+            <h3 className="text-lg font-semibold text-white mt-6 mb-2">11A.3 Operating Agreement Reference</h3>
+            <p>
+              The Equity Participation Agreement issued through the Platform supplements, but does not replace, the requirement to formalize the equity
+              structure in your company's governing documents as described in Section 4.2 of these Terms. The executed Equity Participation Agreement
+              serves as written confirmation of the agreed equity arrangement and may be referenced in, or incorporated into, your company's operating
+              agreement, shareholder register, or cap table documentation.
+            </p>
+
+            <h3 className="text-lg font-semibold text-white mt-6 mb-2">11A.4 Binding Agreement</h3>
+            <p>
+              <strong className="text-white">BY ELECTRONICALLY SIGNING AN EQUITY PARTICIPATION AGREEMENT ON THE BRANDPUSHERS PLATFORM, YOU:</strong>
+            </p>
+            <ul className="list-disc list-inside mt-3 space-y-2 ml-4">
+              <li>Confirm that you have read and understood the full terms of the Equity Participation Agreement;</li>
+              <li>Agree to be legally bound by the equity structure and all provisions of the Equity Participation Agreement;</li>
+              <li>Acknowledge that the electronic signature is legally equivalent to a handwritten signature;</li>
+              <li>Agree that a dispute regarding the equity arrangement shall be resolved pursuant to Section 10 of these Terms (Arbitration);</li>
+              <li>Consent to receiving and transacting with electronic records in accordance with the ESIGN Act.</li>
+            </ul>
+            <p className="mt-4">
+              You may request a PDF or HTML copy of any signed equity agreement at any time through the BrandPushers member dashboard.
+            </p>
+          </section>
+
           {/* Contact */}
           <section>
             <h2 className="text-2xl font-bold text-white mb-4">12. Contact Us</h2>

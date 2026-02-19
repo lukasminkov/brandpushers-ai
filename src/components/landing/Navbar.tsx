@@ -52,7 +52,7 @@ export default function Navbar() {
             href="/login"
             className="text-sm text-gray-500 hover:text-gray-300 transition-colors duration-200"
           >
-            Already applied?
+            Members Area
           </a>
           <a
             href="#apply"
@@ -96,7 +96,7 @@ export default function Navbar() {
                 onClick={() => setMenuOpen(false)}
                 className="text-gray-500 hover:text-gray-300 transition py-1 text-sm"
               >
-                Already applied? Sign in
+                Members Area Sign in
               </a>
               <a
                 href="#apply"
