@@ -8,6 +8,7 @@ import {
   FolderOpen, File, Download, PenLine, CheckCircle, AlertCircle, X, XCircle,
   FolderInput
 } from 'lucide-react'
+import { useToast } from '@/components/ui/ToastContext'
 
 const FOLDER_COLORS = ['#9B0EE5', '#F24822', '#3B82F6', '#10B981', '#F59E0B', '#EC4899', '#06B6D4', '#8B5CF6']
 
@@ -75,6 +76,7 @@ function ContextMenu({ items, onClose }: { items: { icon: React.ReactNode; label
 /* ════════════════════════════════════════════════ */
 export default function DocumentsPage() {
   const supabase = createClient()
+  const { toast } = useToast()
   const [tab, setTab] = useState<'files' | 'agreements'>('files')
   const [docs, setDocs] = useState<Doc[]>([])
   const [agreements, setAgreements] = useState<SignedAgreement[]>([])
@@ -131,7 +133,7 @@ export default function DocumentsPage() {
 
     const path = `${user.id}/${Date.now()}_${file.name}`
     const { error } = await supabase.storage.from('documents').upload(path, file)
-    if (error) { alert(error.message); setUploading(false); return }
+    if (error) { toast.error(error.message); setUploading(false); return }
 
     const { data: { publicUrl } } = supabase.storage.from('documents').getPublicUrl(path)
     await supabase.from('documents').insert({
@@ -202,7 +204,7 @@ export default function DocumentsPage() {
     // Check if folder has files (non-placeholder docs)
     const filesInside = docs.filter(d => d.name !== '__folder__' && (d.folder === folderPath || d.folder?.startsWith(folderPath + '/')))
     if (filesInside.length > 0) {
-      alert('Cannot delete folder — it contains files. Move or delete them first.')
+      toast.error('Cannot delete folder — it contains files. Move or delete them first.')
       setDeleteConfirm(null)
       return
     }

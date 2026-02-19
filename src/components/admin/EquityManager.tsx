@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import AdminModal from '@/components/admin/AdminModal'
+import { useConfirm } from '@/components/ui/ConfirmDialog'
 import {
   Plus, Trash2, Send, Eye, X, Building2,
   User, Percent, CheckCircle, AlertCircle, FileText, Clock, RefreshCw, Download, BadgeCheck, Pencil
@@ -18,7 +19,7 @@ interface EquityStake {
   equity_percentage: number; created_at: string; is_member?: boolean
 }
 interface EquityAgreement {
-  id: string; status: 'pending' | 'signed' | 'expired' | 'revoked'
+  id: string; status: 'pending' | 'signed' | 'expired' | 'revoked' | 'cancelled'
   sent_at: string; signed_at: string | null; agreement_html?: string
 }
 interface AddForm {
@@ -107,6 +108,7 @@ function generateAgreementHtml(member: Member, stakes: EquityStake[], amendmentN
    ════════════════════════════════════════════════════════════ */
 export default function EquityManager({ member }: { member: Member }) {
   const supabase = createClient()
+  const { confirm } = useConfirm()
   const [stakes,        setStakes]        = useState<EquityStake[]>([])
   const [agreements,    setAgreements]    = useState<EquityAgreement[]>([])
   const [stakesLoading, setStakesLoading] = useState(true)
@@ -304,10 +306,13 @@ export default function EquityManager({ member }: { member: Member }) {
     URL.revokeObjectURL(url)
   }
 
+  const [cancellingId, setCancellingId] = useState<string | null>(null)
   const cancelAgreement = async (agreementId: string) => {
-    if (!window.confirm('Cancel this pending agreement? This cannot be undone.')) return
-    await supabase.from('equity_agreements').update({ status: 'cancelled' }).eq('id', agreementId)
-    loadMemberData()
+    setCancellingId(null)
+    const { error } = await supabase.from('equity_agreements').update({ status: 'cancelled' }).eq('id', agreementId)
+    if (!error) {
+      setAgreements(prev => prev.map(a => a.id === agreementId ? { ...a, status: 'cancelled' } as EquityAgreement : a))
+    }
   }
 
   const statusBadge = (s: string) => {
@@ -493,8 +498,14 @@ export default function EquityManager({ member }: { member: Member }) {
                         </button>
                       </>
                     )}
-                    {a.status === 'pending' && (
-                      <button onClick={() => cancelAgreement(a.id)} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-red-400 hover:text-red-300 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 transition">
+                    {a.status === 'pending' && cancellingId === a.id ? (
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] text-gray-400">Cancel?</span>
+                        <button onClick={() => cancelAgreement(a.id)} className="px-2 py-1 text-[11px] rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 transition font-medium">Yes</button>
+                        <button onClick={() => setCancellingId(null)} className="px-2 py-1 text-[11px] rounded-lg text-gray-500 hover:text-white transition">No</button>
+                      </div>
+                    ) : a.status === 'pending' && (
+                      <button onClick={() => setCancellingId(a.id)} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-red-400 hover:text-red-300 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 transition">
                         <X size={12}/> Cancel
                       </button>
                     )}
