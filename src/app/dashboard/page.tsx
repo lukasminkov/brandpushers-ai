@@ -1,161 +1,120 @@
 'use client'
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  CheckCircle, Circle, Building2, FileText, ChevronDown, ChevronRight,
-  BookOpen, Play, Link2, User, MapPin, Calendar, Pencil, Check, X
+  Building2, FileText, CheckCircle, Circle, BookOpen,
+  Play, Link2, ChevronDown, ChevronRight,
+  Pencil, Bell, BarChart2, Megaphone, Newspaper,
 } from 'lucide-react'
 import StepModal from '@/components/dashboard/StepModal'
+import CompanyInfoModal from '@/components/dashboard/CompanyInfoModal'
 
-interface Phase {
-  id: string
-  title: string
-  description: string | null
-  banner_url: string | null
-  sort_order: number
-}
-
-interface Step {
-  id: string
-  phase_id: string
-  title: string
-  content: Record<string, unknown> | null
-  video_url: string | null
-  resource_links: Array<{ title: string; url: string; type: string }> | null
-  sort_order: number
-}
-
+/* ─── Types ─────────────────────────────────────── */
 interface Profile {
   id: string
   full_name: string | null
   email: string | null
   brand_name: string | null
+  company_name: string | null
+  company_type: string | null
+  ein: string | null
+  company_address: string | null
   equity_percentage: number | null
   fee_amount: number | null
   equity_agreed: boolean
-  date_of_birth: string | null
-  residential_address: string | null
+}
+
+interface Phase {
+  id: string; title: string; description: string | null
+  banner_url: string | null; sort_order: number
+}
+
+interface Step {
+  id: string; phase_id: string; title: string
+  content: Record<string, unknown> | null; video_url: string | null
+  resource_links: Array<{ title: string; url: string; type: string }> | null
+  sort_order: number
 }
 
 interface StepProgress {
-  step_id: string
-  completed: boolean
+  step_id: string; completed: boolean
 }
 
-interface Document {
-  id: string
-  name: string
-  file_url: string
-  uploaded_at: string
+interface EquityAgreement {
+  id: string; status: string; sent_at: string; signed_at: string | null
 }
 
-// Inline editable field component
-function InlineEdit({
-  value,
-  onSave,
-  placeholder = 'Click to edit',
-  className = '',
-  textClassName = '',
-}: {
-  value: string
-  onSave: (v: string) => Promise<void>
-  placeholder?: string
-  className?: string
-  textClassName?: string
-}) {
-  const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState(value)
-  const [saving, setSaving] = useState(false)
-  const inputRef = useRef<HTMLInputElement>(null)
+interface EquityStake {
+  id: string; stakeholder_name: string; equity_percentage: number; stakeholder_type: string
+}
 
-  useEffect(() => { if (editing) inputRef.current?.focus() }, [editing])
-
-  const save = async () => {
-    setSaving(true)
-    await onSave(draft)
-    setSaving(false)
-    setEditing(false)
-  }
-
-  if (!editing) {
-    return (
-      <button
-        onClick={() => { setDraft(value); setEditing(true) }}
-        className={`group flex items-center gap-1.5 hover:opacity-80 transition-opacity text-left ${className}`}
-      >
-        <span className={textClassName}>{value || <span className="text-gray-600 italic">{placeholder}</span>}</span>
-        <Pencil size={11} className="text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
-      </button>
-    )
-  }
-
+/* ─── Card wrapper ───────────────────────────────── */
+function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className="flex items-center gap-2">
-      <input
-        ref={inputRef}
-        value={draft}
-        onChange={e => setDraft(e.target.value)}
-        onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false) }}
-        className="px-2 py-1 rounded-lg text-sm text-white outline-none min-w-0"
-        style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(242,72,34,0.4)' }}
-      />
-      <button onClick={save} disabled={saving} className="w-6 h-6 rounded-lg flex items-center justify-center text-green-400 hover:bg-green-500/10 transition-colors shrink-0">
-        {saving ? <div className="w-3 h-3 border border-green-400 border-t-transparent rounded-full animate-spin" /> : <Check size={12} />}
-      </button>
-      <button onClick={() => setEditing(false)} className="w-6 h-6 rounded-lg flex items-center justify-center text-gray-500 hover:bg-white/5 transition-colors shrink-0">
-        <X size={12} />
-      </button>
+    <div
+      className={`rounded-2xl p-6 ${className}`}
+      style={{ background: 'rgba(255,255,255,0.05)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255,255,255,0.1)' }}
+    >
+      {children}
     </div>
   )
 }
 
-type DashTab = 'progress' | 'profile' | 'documents'
+/* ─── Empty field placeholder ────────────────────── */
+function Empty({ text = '—' }: { text?: string }) {
+  return <span className="text-gray-600 text-sm italic">{text}</span>
+}
 
+const COLORS = ['#F24822', '#9B0EE5', '#3B82F6', '#10B981', '#F59E0B', '#EF4444']
+
+/* ════════════════════════════════════════════════════
+   MAIN PAGE
+   ════════════════════════════════════════════════════ */
 export default function DashboardPage() {
+  const supabase = createClient()
+  const [profile, setProfile] = useState<Profile | null>(null)
   const [phases, setPhases] = useState<Phase[]>([])
   const [steps, setSteps] = useState<Step[]>([])
   const [progress, setProgress] = useState<StepProgress[]>([])
-  const [profile, setProfile] = useState<Profile | null>(null)
-  const [docs, setDocs] = useState<Document[]>([])
-  const [loading, setLoading] = useState(true)
+  const [agreements, setAgreements] = useState<EquityAgreement[]>([])
+  const [stakes, setStakes] = useState<EquityStake[]>([])
   const [expandedPhases, setExpandedPhases] = useState<Set<string>>(new Set())
   const [selectedStep, setSelectedStep] = useState<Step | null>(null)
   const [togglingStep, setTogglingStep] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<DashTab>('progress')
-  const supabase = createClient()
+  const [loading, setLoading] = useState(true)
+  const [companyModalOpen, setCompanyModalOpen] = useState(false)
 
   const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
     setUserId(user.id)
 
-    const [profileRes, phasesRes, stepsRes, progressRes, docsRes] = await Promise.all([
-      supabase.from('profiles').select('id, full_name, email, brand_name, equity_percentage, fee_amount, equity_agreed, date_of_birth, residential_address').eq('id', user.id).single(),
+    const [profileRes, phasesRes, stepsRes, progressRes, agreementsRes, stakesRes] = await Promise.all([
+      supabase.from('profiles')
+        .select('id, full_name, email, brand_name, company_name, company_type, ein, company_address, equity_percentage, fee_amount, equity_agreed')
+        .eq('id', user.id).single(),
       supabase.from('phases').select('*').order('sort_order'),
       supabase.from('phase_steps').select('*').order('sort_order'),
       supabase.from('member_step_progress').select('step_id, completed').eq('user_id', user.id),
-      supabase.from('documents').select('*').eq('user_id', user.id).order('uploaded_at', { ascending: false }),
+      supabase.from('equity_agreements').select('id, status, sent_at, signed_at').eq('brand_member_id', user.id).order('created_at', { ascending: false }),
+      supabase.from('equity_stakes').select('id, stakeholder_name, equity_percentage, stakeholder_type').eq('brand_member_id', user.id),
     ])
 
-    setProfile(profileRes.data as Profile)
+    const p = (profileRes.data || {}) as Profile
+    setProfile(p)
     const phaseList = (phasesRes.data || []) as Phase[]
     setPhases(phaseList)
     setSteps((stepsRes.data || []) as Step[])
     setProgress((progressRes.data || []) as StepProgress[])
-    setDocs((docsRes.data || []) as Document[])
+    setAgreements((agreementsRes.data || []) as EquityAgreement[])
+    setStakes((stakesRes.data || []) as EquityStake[])
     if (phaseList.length > 0) setExpandedPhases(new Set([phaseList[0].id]))
     setLoading(false)
   }, [supabase])
 
   useEffect(() => { load() }, [load])
-
-  const updateProfile = async (field: string, value: string | null) => {
-    if (!profile) return
-    await supabase.from('profiles').update({ [field]: value || null }).eq('id', profile.id)
-    setProfile(prev => prev ? { ...prev, [field]: value } : prev)
-  }
 
   const isCompleted = (stepId: string) => progress.some(p => p.step_id === stepId && p.completed)
 
@@ -163,21 +122,16 @@ export default function DashboardPage() {
     if (!userId || togglingStep) return
     setTogglingStep(step.id)
     const wasCompleted = isCompleted(step.id)
-    const now = new Date().toISOString()
-
     setProgress(prev => {
       const existing = prev.find(p => p.step_id === step.id)
       if (existing) return prev.map(p => p.step_id === step.id ? { ...p, completed: !wasCompleted } : p)
       return [...prev, { step_id: step.id, completed: true }]
     })
-
     await supabase.from('member_step_progress').upsert({
-      user_id: userId,
-      step_id: step.id,
+      user_id: userId, step_id: step.id,
       completed: !wasCompleted,
-      completed_at: !wasCompleted ? now : null,
+      completed_at: !wasCompleted ? new Date().toISOString() : null,
     }, { onConflict: 'user_id,step_id' })
-
     setTogglingStep(null)
   }
 
@@ -187,414 +141,425 @@ export default function DashboardPage() {
     const done = ps.filter(s => isCompleted(s.id)).length
     return { done, total: ps.length, pct: ps.length > 0 ? Math.round((done / ps.length) * 100) : 0 }
   }
-
   const totalCompleted = steps.filter(s => isCompleted(s.id)).length
-  const totalSteps = steps.length
-  const overallPct = totalSteps > 0 ? Math.round((totalCompleted / totalSteps) * 100) : 0
-
-  const togglePhase = (phaseId: string) => {
+  const overallPct = steps.length > 0 ? Math.round((totalCompleted / steps.length) * 100) : 0
+  const togglePhase = (id: string) => {
     setExpandedPhases(prev => {
-      const next = new Set(prev)
-      if (next.has(phaseId)) { next.delete(phaseId) } else { next.add(phaseId) }
-      return next
+      const n = new Set(prev)
+      if (n.has(id)) n.delete(id); else n.add(id)
+      return n
     })
   }
 
   if (loading) return (
     <div className="flex items-center justify-center h-64">
-      <div className="w-8 h-8 border-2 border-brand-orange border-t-transparent rounded-full animate-spin" />
+      <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#F24822', borderTopColor: 'transparent' }} />
     </div>
   )
 
-  const hasEquityInfo = profile?.equity_percentage != null || profile?.brand_name
   const firstName = profile?.full_name?.split(' ')[0] || 'there'
-
-  const tabs: { id: DashTab; label: string; icon: typeof User }[] = [
-    { id: 'progress', label: 'My Journey', icon: BookOpen },
-    { id: 'profile', label: 'Profile', icon: User },
-    { id: 'documents', label: 'Documents', icon: FileText },
-  ]
+  const pendingAgreement = agreements.find(a => a.status === 'pending')
+  const signedAgreements = agreements.filter(a => a.status === 'signed')
+  const hasEquity = profile?.equity_percentage != null || stakes.length > 0
+  const totalStakesPct = stakes.reduce((s, e) => s + Number(e.equity_percentage), 0)
 
   return (
-    <div className="max-w-3xl mx-auto p-6 lg:p-8">
-      {/* Welcome header */}
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold mb-1">
-          Welcome back, {firstName}! 👋
+    <div className="max-w-4xl mx-auto p-6 lg:p-8 space-y-6">
+
+      {/* ── Header ──────────────────────────────────── */}
+      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
+        <h1 className="text-3xl font-bold text-white mb-1">
+          Welcome back, <span style={{ background: 'linear-gradient(135deg, #9B0EE5, #F57B18)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>{firstName}</span>! 👋
         </h1>
-        <div className="flex items-center gap-2 text-sm text-gray-400">
-          <Building2 size={12} style={{ color: '#F24822' }} />
-          <InlineEdit
-            value={profile?.brand_name || ''}
-            onSave={v => updateProfile('brand_name', v)}
-            placeholder="Set your brand name"
-            textClassName="font-medium"
-          />
-        </div>
-      </div>
+        <p className="text-gray-500 text-sm">Here's your BrandPushers partner dashboard.</p>
+      </motion.div>
 
-      {/* Tabs */}
-      <div
-        className="flex gap-1 mb-6 p-1 rounded-xl w-fit"
-        style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}
-      >
-        {tabs.map(t => {
-          const Icon = t.icon
-          const isActive = activeTab === t.id
-          return (
+      {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          CARD 1 — Company / Project Information
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
+        <Card>
+          <div className="flex items-start justify-between mb-5">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'rgba(242,72,34,0.1)', border: '1px solid rgba(242,72,34,0.2)' }}>
+                <Building2 size={17} style={{ color: '#F24822' }} />
+              </div>
+              <div>
+                <h2 className="font-semibold text-white text-sm">Company / Project</h2>
+                <p className="text-xs text-gray-500">Your entity details</p>
+              </div>
+            </div>
             <button
-              key={t.id}
-              onClick={() => setActiveTab(t.id)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${isActive ? 'text-white' : 'text-gray-500 hover:text-gray-300'}`}
-              style={isActive ? { background: 'rgba(242,72,34,0.15)', border: '1px solid rgba(242,72,34,0.25)' } : {}}
+              onClick={() => setCompanyModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition hover:opacity-90"
+              style={{ background: 'rgba(242,72,34,0.1)', border: '1px solid rgba(242,72,34,0.2)', color: '#F24822' }}
             >
-              <Icon size={13} style={isActive ? { color: '#F24822' } : {}} />
-              {t.label}
+              <Pencil size={11} /> Edit
             </button>
-          )
-        })}
-      </div>
+          </div>
 
-      {/* ===== MY JOURNEY TAB ===== */}
-      {activeTab === 'progress' && (
-        <div>
-          {/* Equity / Partnership Card */}
-          {/* id="equity-section" — Equity component will be mounted here by bp-equity agent */}
-          {hasEquityInfo && (
-            <motion.div
-              id="equity-section"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="glass rounded-2xl p-6 mb-6 border border-brand-purple/20"
-            >
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-xl bg-logo-gradient flex items-center justify-center shrink-0">
-                  <Building2 size={18} className="text-white" />
+          <div className="grid grid-cols-2 gap-x-8 gap-y-4">
+            {/* Brand / Project Name */}
+            <div>
+              <p className="text-[10px] font-semibold text-gray-600 uppercase tracking-wider mb-1">Project / Brand</p>
+              {profile?.brand_name
+                ? <p className="text-sm font-semibold text-white">{profile.brand_name}</p>
+                : <Empty text="Not yet set" />}
+            </div>
+
+            {/* Legal Company */}
+            <div>
+              <p className="text-[10px] font-semibold text-gray-600 uppercase tracking-wider mb-1">Legal Company Name</p>
+              {profile?.company_name
+                ? <p className="text-sm text-white">{profile.company_name}</p>
+                : <Empty text="Not yet registered" />}
+            </div>
+
+            {/* Company Type */}
+            <div>
+              <p className="text-[10px] font-semibold text-gray-600 uppercase tracking-wider mb-1">Company Type</p>
+              {profile?.company_type
+                ? (
+                  <span className="text-xs px-2 py-1 rounded-lg font-medium" style={{ background: 'rgba(155,14,229,0.12)', border: '1px solid rgba(155,14,229,0.2)', color: '#c084fc' }}>
+                    {profile.company_type}
+                  </span>
+                )
+                : <Empty text="Not yet formed" />}
+            </div>
+
+            {/* EIN */}
+            <div>
+              <p className="text-[10px] font-semibold text-gray-600 uppercase tracking-wider mb-1">EIN</p>
+              {profile?.ein
+                ? <p className="text-sm text-white font-mono">{profile.ein}</p>
+                : <Empty text="Not yet obtained" />}
+            </div>
+
+            {/* Registered Address */}
+            <div className="col-span-2">
+              <p className="text-[10px] font-semibold text-gray-600 uppercase tracking-wider mb-1">Registered Address</p>
+              {profile?.company_address
+                ? <p className="text-sm text-white">{profile.company_address}</p>
+                : <Empty text="Not yet registered" />}
+            </div>
+
+            {/* Shareholders */}
+            {stakes.length > 0 && (
+              <div className="col-span-2">
+                <p className="text-[10px] font-semibold text-gray-600 uppercase tracking-wider mb-2">Shareholders</p>
+                <div className="flex flex-wrap gap-2">
+                  {stakes.map((s, i) => (
+                    <div key={s.id} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs"
+                      style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
+                    >
+                      <div className="w-1.5 h-1.5 rounded-full" style={{ background: COLORS[i % COLORS.length] }} />
+                      <span className="text-gray-300">{s.stakeholder_name}</span>
+                      <span className="font-semibold" style={{ color: COLORS[i % COLORS.length] }}>{s.equity_percentage}%</span>
+                    </div>
+                  ))}
                 </div>
-                <div className="flex-1">
-                  <h3 className="font-semibold text-white mb-1">Your Partnership with BrandPushers</h3>
-                  {profile?.brand_name && <p className="text-brand-orange font-medium mb-2">{profile.brand_name}</p>}
-                  {profile?.equity_percentage != null && (
-                    <div className="flex items-baseline gap-2 mb-3">
-                      <span className="text-3xl font-bold text-white">{profile.equity_percentage}%</span>
-                      <span className="text-gray-400 text-sm">BrandPushers equity stake</span>
+              </div>
+            )}
+          </div>
+        </Card>
+      </motion.div>
+
+      {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          CARD 2 — Program Progress
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+        <Card>
+          <div className="flex items-center gap-3 mb-5">
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'rgba(155,14,229,0.1)', border: '1px solid rgba(155,14,229,0.2)' }}>
+              <BarChart2 size={17} style={{ color: '#9B0EE5' }} />
+            </div>
+            <div className="flex-1">
+              <h2 className="font-semibold text-white text-sm">Program Progress</h2>
+              <p className="text-xs text-gray-500">Your journey through the program</p>
+            </div>
+            {steps.length > 0 && (
+              <div className="text-right">
+                <span className="text-2xl font-bold" style={{ background: 'linear-gradient(135deg, #9B0EE5, #F57B18)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+                  {overallPct}%
+                </span>
+                <p className="text-[10px] text-gray-600">{totalCompleted}/{steps.length} steps</p>
+              </div>
+            )}
+          </div>
+
+          {steps.length > 0 && (
+            <div className="mb-5">
+              <div className="w-full h-2 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)' }}>
+                <motion.div
+                  initial={{ width: 0 }} animate={{ width: `${overallPct}%` }}
+                  transition={{ duration: 1, ease: 'easeOut' }}
+                  className="h-full rounded-full"
+                  style={{ background: 'linear-gradient(90deg, #9B0EE5, #F24822)' }}
+                />
+              </div>
+            </div>
+          )}
+
+          {phases.length === 0 ? (
+            <div className="py-8 text-center text-gray-600">
+              <BookOpen size={32} className="mx-auto mb-2 opacity-30" />
+              <p className="text-sm">No phases published yet. Check back soon!</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {phases.map((phase, phaseIdx) => {
+                const { done, total, pct } = phaseProgress(phase.id)
+                const isExpanded = expandedPhases.has(phase.id)
+                const ps = phaseSteps(phase.id)
+                const isPhaseComplete = total > 0 && done === total
+
+                return (
+                  <div
+                    key={phase.id}
+                    className="rounded-xl overflow-hidden transition-colors"
+                    style={{ border: `1px solid ${isPhaseComplete ? 'rgba(74,222,128,0.2)' : 'rgba(255,255,255,0.07)'}` }}
+                  >
+                    {/* Phase header */}
+                    <button
+                      onClick={() => togglePhase(phase.id)}
+                      className="w-full px-4 py-3.5 flex items-center gap-3 hover:bg-white/[0.03] transition text-left"
+                    >
+                      <div
+                        className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-xs font-bold"
+                        style={isPhaseComplete
+                          ? { background: 'rgba(74,222,128,0.15)', color: '#4ade80' }
+                          : { background: 'rgba(242,72,34,0.1)', color: '#F24822' }
+                        }
+                      >
+                        {isPhaseComplete ? <CheckCircle size={15} /> : phaseIdx + 1}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-sm text-white">{phase.title}</p>
+                          {isPhaseComplete && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full text-green-400" style={{ background: 'rgba(74,222,128,0.1)' }}>
+                              Complete
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 mt-1">
+                          <div className="flex-1 h-1 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                            <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, background: 'linear-gradient(90deg, #9B0EE5, #F24822)' }} />
+                          </div>
+                          <span className="text-[10px] text-gray-600 shrink-0">{done}/{total}</span>
+                        </div>
+                      </div>
+                      <ChevronDown size={15} className={`text-gray-500 shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                    </button>
+
+                    {/* Steps */}
+                    <AnimatePresence>
+                      {isExpanded && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }}
+                          className="overflow-hidden"
+                        >
+                          <div className="px-3 pb-3 pt-1 space-y-1 border-t" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+                            {ps.length === 0 ? (
+                              <p className="text-xs text-gray-600 text-center py-3">No steps yet</p>
+                            ) : ps.map((step, si) => {
+                              const done = isCompleted(step.id)
+                              const hasContent = step.content || step.video_url || (step.resource_links && step.resource_links.length > 0)
+                              return (
+                                <motion.div
+                                  key={step.id}
+                                  initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }}
+                                  transition={{ delay: si * 0.03 }}
+                                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg group transition ${done ? 'bg-green-500/5' : 'hover:bg-white/[0.03]'}`}
+                                >
+                                  <button
+                                    onClick={() => toggleStep(step)}
+                                    disabled={togglingStep === step.id}
+                                    className={`shrink-0 transition-transform ${togglingStep === step.id ? 'opacity-50' : 'hover:scale-110 active:scale-95'}`}
+                                  >
+                                    {done
+                                      ? <CheckCircle size={18} className="text-green-400" />
+                                      : <Circle size={18} className="text-gray-600 group-hover:text-gray-400 transition" />}
+                                  </button>
+                                  <div className="flex-1 min-w-0">
+                                    <span className={`text-sm ${done ? 'line-through text-gray-500' : 'text-white'}`}>{step.title}</span>
+                                    <div className="flex items-center gap-2 mt-0.5">
+                                      {step.video_url && <Play size={9} className="text-gray-600" />}
+                                      {step.resource_links && step.resource_links.length > 0 && <Link2 size={9} className="text-gray-600" />}
+                                    </div>
+                                  </div>
+                                  {hasContent && (
+                                    <button
+                                      onClick={() => setSelectedStep(step)}
+                                      className="shrink-0 text-xs px-2.5 py-1 rounded-lg transition text-gray-500 hover:text-white hover:bg-white/10 flex items-center gap-1 opacity-0 group-hover:opacity-100"
+                                    >
+                                      <ChevronRight size={11} /> View
+                                    </button>
+                                  )}
+                                </motion.div>
+                              )
+                            })}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </Card>
+      </motion.div>
+
+      {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          CARD 3 — Equity Overview
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
+        <Card>
+          <div className="flex items-center gap-3 mb-5">
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'rgba(242,72,34,0.1)', border: '1px solid rgba(242,72,34,0.2)' }}>
+              <Megaphone size={17} style={{ color: '#F24822' }} />
+            </div>
+            <div>
+              <h2 className="font-semibold text-white text-sm">Equity Overview</h2>
+              <p className="text-xs text-gray-500">Partnership & cap table</p>
+            </div>
+          </div>
+
+          {!hasEquity && agreements.length === 0 ? (
+            <div className="py-8 text-center text-gray-600">
+              <Megaphone size={28} className="mx-auto mb-2 opacity-20" />
+              <p className="text-sm">Equity details will appear once your cap table is set up.</p>
+              <p className="text-xs mt-1 text-gray-700">Your advisor will configure this and notify you.</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Partnership info */}
+              {profile?.equity_percentage != null && (
+                <div className="p-4 rounded-xl" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
+                  <p className="text-xs text-gray-500 mb-1">BrandPushers equity stake in {profile.brand_name || 'your company'}</p>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-3xl font-bold text-white">{profile.equity_percentage}%</span>
+                    <span className="text-sm text-gray-500">held by WHUT.AI LLC</span>
+                  </div>
+                  {profile.fee_amount != null && (
+                    <p className="text-xs text-gray-600 mt-1">Program fee: <span className="text-gray-300">${profile.fee_amount.toLocaleString()}</span></p>
+                  )}
+                  {profile.equity_agreed && (
+                    <div className="flex items-center gap-1.5 mt-2 text-green-400 text-xs">
+                      <CheckCircle size={12} /> Equity terms confirmed
                     </div>
                   )}
-                  {profile?.equity_percentage != null && (
-                    <div className="rounded-xl bg-black/20 border border-white/10 p-4 mb-3">
-                      <div className="flex items-start gap-2">
-                        <FileText size={14} className="text-brand-orange mt-0.5 shrink-0" />
-                        <p className="text-sm text-gray-400 leading-relaxed">
-                          <strong className="text-white">BrandPushers (WHUT.AI LLC)</strong> holds{' '}
-                          <strong className="text-brand-orange">{profile.equity_percentage}%</strong> equity in{' '}
-                          <strong className="text-white">{profile.brand_name || 'your company'}</strong>.{' '}
-                          Ensure this is reflected in your operating agreement and cap table.
-                        </p>
+                </div>
+              )}
+
+              {/* Cap table bar */}
+              {stakes.length > 0 && (
+                <div>
+                  <p className="text-xs text-gray-500 mb-2">Cap table · {totalStakesPct.toFixed(1)}% allocated</p>
+                  <div className="w-full h-5 rounded-full overflow-hidden flex" style={{ background: 'rgba(255,255,255,0.04)' }}>
+                    {stakes.map((s, i) => (
+                      <div
+                        key={s.id}
+                        style={{ width: `${s.equity_percentage}%`, background: COLORS[i % COLORS.length], minWidth: s.equity_percentage > 0 ? 2 : 0 }}
+                        title={`${s.stakeholder_name}: ${s.equity_percentage}%`}
+                      />
+                    ))}
+                    {totalStakesPct < 99.5 && (
+                      <div style={{ flex: 1, background: 'rgba(255,255,255,0.04)' }} />
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-3 mt-2">
+                    {stakes.map((s, i) => (
+                      <div key={s.id} className="flex items-center gap-1.5">
+                        <div className="w-2 h-2 rounded-full" style={{ background: COLORS[i % COLORS.length] }} />
+                        <span className="text-xs text-gray-400">{s.stakeholder_name}</span>
+                        <span className="text-xs font-semibold" style={{ color: COLORS[i % COLORS.length] }}>{s.equity_percentage}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Agreement status */}
+              {agreements.length > 0 && (
+                <div className="space-y-2">
+                  {pendingAgreement && (
+                    <div className="flex items-center gap-3 p-3 rounded-xl"
+                      style={{ background: 'rgba(242,72,34,0.08)', border: '1px solid rgba(242,72,34,0.2)' }}
+                    >
+                      <Bell size={14} style={{ color: '#F24822' }} className="shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-white">Agreement pending your signature</p>
+                        <p className="text-[10px] text-gray-500">Sent {new Date(pendingAgreement.sent_at).toLocaleDateString()} · Check notifications to sign</p>
                       </div>
                     </div>
                   )}
-                  {profile?.fee_amount != null && (
-                    <p className="text-sm text-gray-500">Program fee: <span className="text-gray-300 font-medium">${profile.fee_amount.toLocaleString()} USD</span></p>
-                  )}
-                  {profile?.equity_agreed && (
-                    <div className="flex items-center gap-2 mt-2 text-green-400 text-sm">
-                      <CheckCircle size={14} /><span>Equity terms confirmed</span>
+                  {signedAgreements.length > 0 && (
+                    <div className="flex items-center gap-3 p-3 rounded-xl"
+                      style={{ background: 'rgba(74,222,128,0.06)', border: '1px solid rgba(74,222,128,0.15)' }}
+                    >
+                      <CheckCircle size={14} className="text-green-400 shrink-0" />
+                      <div>
+                        <p className="text-xs font-medium text-white">{signedAgreements.length} agreement{signedAgreements.length !== 1 ? 's' : ''} signed</p>
+                        <p className="text-[10px] text-gray-500">Available in your Documents</p>
+                      </div>
                     </div>
                   )}
                 </div>
-              </div>
-            </motion.div>
-          )}
-
-          {/* Placeholder when no equity info yet */}
-          {!hasEquityInfo && (
-            <div
-              id="equity-section"
-              className="glass rounded-2xl p-5 mb-6 border border-white/5"
-              // Equity component will be mounted here by bp-equity agent
-            />
-          )}
-
-          {/* Overall Progress */}
-          {/* id="phases-section" — Phases component will be mounted here by bp-phases agent */}
-          {totalSteps > 0 && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.05 }}
-              className="glass rounded-2xl p-6 mb-8"
-            >
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <h3 className="font-semibold">Overall Progress</h3>
-                  <p className="text-gray-500 text-sm">{totalCompleted} of {totalSteps} steps completed</p>
-                </div>
-                <div className="text-right">
-                  <span className="text-3xl font-bold bg-logo-gradient bg-clip-text text-transparent">{overallPct}%</span>
-                </div>
-              </div>
-              <div className="w-full h-3 bg-black/30 rounded-full overflow-hidden">
-                <motion.div
-                  initial={{ width: 0 }}
-                  animate={{ width: `${overallPct}%` }}
-                  transition={{ duration: 1, ease: 'easeOut' }}
-                  className="h-full bg-logo-gradient rounded-full"
-                />
-              </div>
-            </motion.div>
-          )}
-
-          {/* Phases */}
-          <div id="phases-section">
-            {/* Phases component will be mounted here by bp-phases agent */}
-            {phases.length === 0 ? (
-              <div className="glass rounded-2xl p-12 text-center text-gray-500">
-                <BookOpen size={40} className="mx-auto mb-3 opacity-30" />
-                <p>No phases published yet. Check back soon!</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {phases.map((phase, phaseIdx) => {
-                  const { done, total, pct } = phaseProgress(phase.id)
-                  const isExpanded = expandedPhases.has(phase.id)
-                  const ps = phaseSteps(phase.id)
-                  const isPhaseComplete = total > 0 && done === total
-
-                  return (
-                    <motion.div
-                      key={phase.id}
-                      initial={{ opacity: 0, y: 12 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: phaseIdx * 0.06 }}
-                      className={`glass rounded-2xl overflow-hidden border transition-colors ${isPhaseComplete ? 'border-green-500/30' : 'border-white/10'}`}
-                    >
-                      {/* Phase Banner */}
-                      {phase.banner_url && (
-                        <div className="h-32 overflow-hidden relative">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={phase.banner_url} alt={phase.title} className="w-full h-full object-cover" />
-                          <div className="absolute inset-0 bg-gradient-to-b from-transparent to-[#0A0A0A]/80" />
-                        </div>
-                      )}
-
-                      {/* Phase Header */}
-                      <button
-                        onClick={() => togglePhase(phase.id)}
-                        className="w-full px-6 py-5 flex items-center gap-4 hover:bg-white/5 transition text-left"
-                      >
-                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 font-bold text-sm ${isPhaseComplete ? 'bg-green-500/20 text-green-400' : 'bg-brand-orange/20 text-brand-orange'}`}>
-                          {isPhaseComplete ? <CheckCircle size={18} /> : phaseIdx + 1}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <h3 className="font-bold text-white">{phase.title}</h3>
-                            {isPhaseComplete && (
-                              <span className="text-xs px-2 py-0.5 bg-green-500/20 text-green-400 rounded-full">Complete!</span>
-                            )}
-                          </div>
-                          {phase.description && (
-                            <p className="text-gray-500 text-sm mt-0.5 truncate">{phase.description}</p>
-                          )}
-                          <div className="flex items-center gap-2 mt-2">
-                            <div className="flex-1 h-1.5 bg-black/30 rounded-full overflow-hidden">
-                              <div
-                                className="h-full bg-logo-gradient rounded-full transition-all duration-500"
-                                style={{ width: `${pct}%` }}
-                              />
-                            </div>
-                            <span className="text-xs text-gray-500 flex-shrink-0">{done}/{total}</span>
-                          </div>
-                        </div>
-                        <ChevronDown
-                          size={18}
-                          className={`text-gray-400 flex-shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-                        />
-                      </button>
-
-                      {/* Steps */}
-                      <AnimatePresence>
-                        {isExpanded && (
-                          <motion.div
-                            initial={{ height: 0, opacity: 0 }}
-                            animate={{ height: 'auto', opacity: 1 }}
-                            exit={{ height: 0, opacity: 0 }}
-                            transition={{ duration: 0.2 }}
-                            className="overflow-hidden"
-                          >
-                            <div className="px-4 pb-4 space-y-1.5 border-t border-white/5 pt-3">
-                              {ps.length === 0 ? (
-                                <p className="text-sm text-gray-600 text-center py-4">No steps in this phase yet</p>
-                              ) : (
-                                ps.map((step, stepIdx) => {
-                                  const done = isCompleted(step.id)
-                                  const hasContent = step.content || step.video_url || (step.resource_links && step.resource_links.length > 0)
-                                  return (
-                                    <motion.div
-                                      key={step.id}
-                                      initial={{ opacity: 0, x: -8 }}
-                                      animate={{ opacity: 1, x: 0 }}
-                                      transition={{ delay: stepIdx * 0.04 }}
-                                      className={`flex items-center gap-3 px-4 py-3 rounded-xl transition group ${done ? 'bg-green-500/5' : 'hover:bg-white/5'}`}
-                                    >
-                                      <button
-                                        onClick={() => toggleStep(step)}
-                                        disabled={togglingStep === step.id}
-                                        className={`flex-shrink-0 transition-transform ${togglingStep === step.id ? 'opacity-50' : 'hover:scale-110 active:scale-95'}`}
-                                      >
-                                        {done ? (
-                                          <CheckCircle size={22} className="text-green-400" />
-                                        ) : (
-                                          <Circle size={22} className="text-gray-600 group-hover:text-gray-400 transition" />
-                                        )}
-                                      </button>
-                                      <div className="flex-1 min-w-0">
-                                        <span className={`text-sm font-medium ${done ? 'line-through text-gray-500' : 'text-white'}`}>
-                                          {step.title}
-                                        </span>
-                                        <div className="flex items-center gap-2 mt-0.5">
-                                          {step.video_url && <Play size={10} className="text-gray-600" />}
-                                          {step.resource_links && step.resource_links.length > 0 && <Link2 size={10} className="text-gray-600" />}
-                                          {step.video_url && <span className="text-xs text-gray-600">Video</span>}
-                                          {step.resource_links && step.resource_links.length > 0 && (
-                                            <span className="text-xs text-gray-600">{step.resource_links.length} resource{step.resource_links.length !== 1 ? 's' : ''}</span>
-                                          )}
-                                        </div>
-                                      </div>
-                                      {hasContent && (
-                                        <button
-                                          onClick={() => setSelectedStep(step)}
-                                          className="flex-shrink-0 text-xs px-3 py-1.5 rounded-lg glass hover:bg-white/10 transition text-gray-400 hover:text-white flex items-center gap-1.5 opacity-0 group-hover:opacity-100"
-                                        >
-                                          <ChevronRight size={12} /> View
-                                        </button>
-                                      )}
-                                    </motion.div>
-                                  )
-                                })
-                              )}
-                            </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </motion.div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ===== PROFILE TAB ===== */}
-      {activeTab === 'profile' && (
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="space-y-4"
-        >
-          <div className="glass rounded-2xl p-6 space-y-5">
-            <h2 className="font-semibold text-white flex items-center gap-2">
-              <User size={15} style={{ color: '#F24822' }} /> Profile Information
-            </h2>
-
-            <div className="space-y-1.5">
-              <label className="text-xs text-gray-500 uppercase tracking-wider">Full Name</label>
-              <InlineEdit
-                value={profile?.full_name || ''}
-                onSave={v => updateProfile('full_name', v)}
-                placeholder="Enter your full name"
-                textClassName="text-sm text-white"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs text-gray-500 uppercase tracking-wider">Email</label>
-              <p className="text-sm text-gray-400">{profile?.email || '—'}</p>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
-                <Building2 size={10} style={{ color: '#F24822' }} /> Brand / Company Name
-              </label>
-              <InlineEdit
-                value={profile?.brand_name || ''}
-                onSave={v => updateProfile('brand_name', v)}
-                placeholder="Enter your brand name"
-                textClassName="text-sm font-medium"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
-                <Calendar size={10} /> Date of Birth
-              </label>
-              {profile?.date_of_birth ? (
-                <p className="text-sm text-white">
-                  {new Date(profile.date_of_birth).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
-                </p>
-              ) : (
-                <p className="text-sm text-gray-600">Not provided</p>
               )}
             </div>
+          )}
+        </Card>
+      </motion.div>
 
-            <div className="space-y-1.5">
-              <label className="text-xs text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
-                <MapPin size={10} /> Residential Address
-              </label>
-              <InlineEdit
-                value={profile?.residential_address || ''}
-                onSave={v => updateProfile('residential_address', v)}
-                placeholder="Enter your address"
-                textClassName="text-sm text-gray-300"
-              />
+      {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+          CARD 4 — News / Updates
+          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+        <Card>
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.2)' }}>
+              <Newspaper size={17} style={{ color: '#60a5fa' }} />
+            </div>
+            <div>
+              <h2 className="font-semibold text-white text-sm">News & Updates</h2>
+              <p className="text-xs text-gray-500">Latest from BrandPushers</p>
             </div>
           </div>
-        </motion.div>
-      )}
 
-      {/* ===== DOCUMENTS TAB ===== */}
-      {activeTab === 'documents' && (
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-          <div className="glass rounded-2xl p-6">
-            <h2 className="font-semibold text-white flex items-center gap-2 mb-5">
-              <FileText size={15} style={{ color: '#F24822' }} /> Documents
-            </h2>
-            {docs.length === 0 ? (
-              <div className="py-12 text-center text-gray-600">
-                <FileText size={32} className="mx-auto mb-3 opacity-20" />
-                <p className="text-sm">No documents yet. Documents shared by your admin will appear here.</p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {docs.map(doc => (
-                  <a
-                    key={doc.id}
-                    href={doc.file_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-4 p-4 rounded-xl transition-colors hover:bg-white/5 group"
-                    style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}
-                  >
-                    <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'rgba(242,72,34,0.1)', border: '1px solid rgba(242,72,34,0.2)' }}>
-                      <FileText size={14} style={{ color: '#F24822' }} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-white truncate">{doc.name}</p>
-                      <p className="text-xs text-gray-500">
-                        {new Date(doc.uploaded_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
-                      </p>
-                    </div>
-                    <ChevronRight size={14} className="text-gray-600 group-hover:text-gray-400 transition-colors" />
-                  </a>
-                ))}
-              </div>
-            )}
+          <div className="py-6 text-center text-gray-600">
+            <Newspaper size={28} className="mx-auto mb-2 opacity-20" />
+            <p className="text-sm">No updates yet.</p>
+            <p className="text-xs mt-1 text-gray-700">Program announcements will appear here.</p>
           </div>
-        </motion.div>
-      )}
+        </Card>
+      </motion.div>
 
-      {/* Step Modal */}
+      {/* Step modal */}
       <StepModal step={selectedStep} onClose={() => setSelectedStep(null)} />
+
+      {/* Company info modal */}
+      <AnimatePresence>
+        {companyModalOpen && profile && (
+          <CompanyInfoModal
+            userId={profile.id}
+            initialData={{
+              brand_name: profile.brand_name,
+              company_name: profile.company_name,
+              company_type: profile.company_type,
+              ein: profile.ein,
+              company_address: profile.company_address,
+            }}
+            onClose={() => setCompanyModalOpen(false)}
+            onSaved={data => {
+              setProfile(prev => prev ? { ...prev, ...data } : prev)
+              setCompanyModalOpen(false)
+            }}
+          />
+        )}
+      </AnimatePresence>
     </div>
   )
 }

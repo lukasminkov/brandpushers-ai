@@ -1,14 +1,12 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
-import Image from 'next/image'
-import {
-  LayoutDashboard, BookOpen, FileText, LogOut, Settings,
-  ChevronLeft, ChevronRight, Zap
-} from 'lucide-react'
+import { LayoutDashboard, FileText, LogOut, Bell, Settings, Zap } from 'lucide-react'
 import OnboardingWizard from '@/components/onboarding/OnboardingWizard'
+import NotificationsPanel from '@/components/dashboard/NotificationsPanel'
+import SettingsModal from '@/components/dashboard/SettingsModal'
 
 interface Profile {
   id: string
@@ -22,62 +20,72 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
   const [showOnboarding, setShowOnboarding] = useState(false)
-  const [collapsed, setCollapsed] = useState(false)
+  const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [unreadCount, setUnreadCount] = useState(0)
   const router = useRouter()
   const pathname = usePathname()
   const supabase = createClient()
 
   useEffect(() => {
     ;(async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-      if (!user) {
-        router.push('/login')
-        return
-      }
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { router.push('/login'); return }
+
       const { data } = await supabase
         .from('profiles')
         .select('id, full_name, brand_name, role, onboarding_completed')
         .eq('id', user.id)
         .single()
 
-      if (data?.role !== 'member') {
-        router.push('/pending')
-        return
-      }
+      if (data?.role !== 'member') { router.push('/pending'); return }
 
       setProfile(data as Profile)
-
-      // Show onboarding if not completed
-      if (!data?.onboarding_completed) {
-        setShowOnboarding(true)
-      }
-
+      if (!data?.onboarding_completed) setShowOnboarding(true)
       setLoading(false)
     })()
   }, [router, supabase])
 
-  const handleOnboardingComplete = () => {
-    setShowOnboarding(false)
-    // Refresh profile
-    supabase
-      .from('profiles')
-      .select('id, full_name, brand_name, role, onboarding_completed')
-      .eq('id', profile!.id)
-      .single()
-      .then(({ data }) => {
-        if (data) setProfile(data as Profile)
-      })
-  }
+  // Load unread notification count
+  const loadUnreadCount = useCallback(async (profileId: string) => {
+    const { count } = await supabase
+      .from('notifications')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', profileId)
+      .eq('read', false)
+    setUnreadCount(count || 0)
+  }, [supabase])
+
+  useEffect(() => {
+    if (!profile) return
+    loadUnreadCount(profile.id)
+
+    const channel = supabase
+      .channel(`layout-notif-${profile.id}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'notifications',
+        filter: `user_id=eq.${profile.id}`,
+      }, () => loadUnreadCount(profile.id))
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'notifications',
+        filter: `user_id=eq.${profile.id}`,
+      }, () => loadUnreadCount(profile.id))
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
+  }, [profile, loadUnreadCount, supabase])
 
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: '#0A0A0A' }}>
         <div className="flex flex-col items-center gap-4">
           <div
-            className="w-10 h-10 rounded-full border-2 border-t-transparent animate-spin"
-            style={{ borderColor: '#F24822 transparent transparent transparent' }}
+            className="w-10 h-10 rounded-full border-2 animate-spin"
+            style={{ borderColor: '#F24822', borderTopColor: 'transparent' }}
           />
           <p className="text-gray-500 text-sm">Loading your dashboard…</p>
         </div>
@@ -87,24 +95,26 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const nav = [
     { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-    { href: '/dashboard/resources', icon: BookOpen, label: 'Program' },
     { href: '/dashboard/documents', icon: FileText, label: 'Documents' },
-    { href: '/dashboard/settings', icon: Settings, label: 'Settings' },
   ]
+
+  const initial = (profile?.full_name || profile?.brand_name || 'M').charAt(0).toUpperCase()
 
   return (
     <div className="min-h-screen flex" style={{ background: '#0A0A0A' }}>
-      {/* Sidebar */}
+
+      {/* ── Sidebar ─────────────────────────────────────── */}
       <aside
-        className="flex flex-col border-r transition-all duration-300 shrink-0"
+        className="flex flex-col border-r shrink-0 relative"
         style={{
-          width: collapsed ? '72px' : '240px',
+          width: '240px',
           borderColor: 'rgba(255,255,255,0.06)',
           background: 'rgba(255,255,255,0.02)',
         }}
       >
         {/* Logo */}
-        <div className={`flex items-center gap-3 px-4 py-5 border-b ${collapsed ? 'justify-center' : ''}`}
+        <div
+          className="flex items-center gap-3 px-5 py-5 border-b"
           style={{ borderColor: 'rgba(255,255,255,0.06)' }}
         >
           <div
@@ -113,32 +123,29 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           >
             <Zap size={14} className="text-white" />
           </div>
-          {!collapsed && (
-            <span
-              className="font-bold text-sm"
-              style={{
-                background: 'linear-gradient(135deg, #9B0EE5, #F57B18)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-              }}
-            >
-              BrandPushers
-            </span>
-          )}
+          <span
+            className="font-bold text-sm"
+            style={{
+              background: 'linear-gradient(135deg, #9B0EE5, #F57B18)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+            }}
+          >
+            BrandPushers
+          </span>
         </div>
 
         {/* Nav items */}
-        <nav className="flex-1 p-3 space-y-1">
-          {nav.map((n) => {
-            const isActive = pathname === n.href || (n.href !== '/dashboard' && pathname.startsWith(n.href))
+        <nav className="flex-1 p-3 pt-4 space-y-1">
+          {nav.map(n => {
+            const isActive =
+              pathname === n.href ||
+              (n.href !== '/dashboard' && pathname.startsWith(n.href))
             return (
               <Link
                 key={n.href}
                 href={n.href}
-                title={collapsed ? n.label : undefined}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-200 group ${
-                  collapsed ? 'justify-center' : ''
-                } ${
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-200 ${
                   isActive
                     ? 'text-white'
                     : 'text-gray-500 hover:text-gray-200 hover:bg-white/5'
@@ -154,71 +161,127 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               >
                 <n.icon
                   size={16}
-                  className={isActive ? 'text-brand-orange' : 'text-gray-500 group-hover:text-gray-300 transition-colors'}
                   style={isActive ? { color: '#F24822' } : {}}
                 />
-                {!collapsed && <span>{n.label}</span>}
+                <span>{n.label}</span>
               </Link>
             )
           })}
         </nav>
 
-        {/* Profile mini + signout */}
-        <div className="p-3 space-y-1 border-t" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
-          {!collapsed && profile && (
+        {/* ── Bottom area ──────────────────────────── */}
+        <div
+          className="p-3 space-y-1.5 border-t"
+          style={{ borderColor: 'rgba(255,255,255,0.06)' }}
+        >
+          {/* Notifications bell */}
+          <button
+            onClick={() => setNotificationsOpen(true)}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-500 hover:text-gray-200 hover:bg-white/5 transition-all duration-200"
+          >
+            <Bell size={15} />
+            <span className="flex-1 text-left">Notifications</span>
+            {unreadCount > 0 && (
+              <span
+                className="flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-white text-[10px] font-bold"
+                style={{ background: '#F24822' }}
+              >
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )}
+          </button>
+
+          {/* Profile row + gear */}
+          <div className="flex items-center gap-2">
+            {/* Profile info */}
             <div
-              className="flex items-center gap-3 px-3 py-2 rounded-xl mb-1"
-              style={{ background: 'rgba(255,255,255,0.03)' }}
+              className="flex-1 flex items-center gap-2.5 px-3 py-2 rounded-xl min-w-0"
+              style={{
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid rgba(255,255,255,0.05)',
+              }}
             >
               <div
                 className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
                 style={{ background: 'linear-gradient(135deg, #9B0EE5, #F24822)' }}
               >
-                {(profile.full_name || 'U').charAt(0).toUpperCase()}
+                {initial}
               </div>
-              <div className="min-w-0">
-                <p className="text-xs font-medium text-white truncate">{profile.full_name || 'Member'}</p>
-                {profile.brand_name && (
-                  <p className="text-xs truncate" style={{ color: '#F24822' }}>{profile.brand_name}</p>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-white truncate">
+                  {profile?.full_name || 'Member'}
+                </p>
+                {profile?.brand_name && (
+                  <p className="text-[10px] truncate" style={{ color: '#F24822' }}>
+                    {profile.brand_name}
+                  </p>
                 )}
               </div>
             </div>
-          )}
 
+            {/* Settings gear */}
+            <button
+              onClick={() => setSettingsOpen(true)}
+              title="Settings"
+              className="w-9 h-9 rounded-xl flex items-center justify-center text-gray-500 hover:text-gray-200 hover:bg-white/5 transition-all shrink-0"
+            >
+              <Settings size={15} />
+            </button>
+          </div>
+
+          {/* Sign out */}
           <button
             onClick={async () => {
               await supabase.auth.signOut()
               router.push('/')
             }}
-            title={collapsed ? 'Sign Out' : undefined}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-500 hover:text-red-400 hover:bg-red-500/5 transition-all duration-200 ${collapsed ? 'justify-center' : ''}`}
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs text-gray-600 hover:text-red-400 hover:bg-red-500/5 transition-all duration-200"
           >
-            <LogOut size={16} />
-            {!collapsed && 'Sign Out'}
+            <LogOut size={13} />
+            Sign Out
           </button>
         </div>
-
-        {/* Collapse toggle */}
-        <button
-          onClick={() => setCollapsed((c) => !c)}
-          className="absolute top-1/2 -translate-y-1/2 -right-3 w-6 h-6 rounded-full border flex items-center justify-center transition-all hover:scale-110 z-10"
-          style={{ background: '#1a1a1a', borderColor: 'rgba(255,255,255,0.1)' }}
-        >
-          {collapsed ? <ChevronRight size={12} className="text-gray-400" /> : <ChevronLeft size={12} className="text-gray-400" />}
-        </button>
       </aside>
 
-      {/* Main content */}
-      <main className="flex-1 overflow-auto">
+      {/* ── Main content ─────────────────────────────── */}
+      <main className="flex-1 overflow-auto" style={{ overflowX: 'hidden' }}>
         {children}
       </main>
 
-      {/* Onboarding overlay */}
+      {/* ── Onboarding overlay ───────────────────────── */}
       {showOnboarding && profile && (
         <OnboardingWizard
           userId={profile.id}
           initialFullName={profile.full_name || ''}
-          onComplete={handleOnboardingComplete}
+          onComplete={() => {
+            setShowOnboarding(false)
+            supabase
+              .from('profiles')
+              .select('id, full_name, brand_name, role, onboarding_completed')
+              .eq('id', profile.id)
+              .single()
+              .then(({ data }) => { if (data) setProfile(data as Profile) })
+          }}
+        />
+      )}
+
+      {/* ── Notifications panel ──────────────────────── */}
+      <NotificationsPanel
+        open={notificationsOpen}
+        onClose={() => setNotificationsOpen(false)}
+        userId={profile?.id || ''}
+        onUnreadChange={setUnreadCount}
+      />
+
+      {/* ── Settings modal ───────────────────────────── */}
+      {settingsOpen && profile && (
+        <SettingsModal
+          profile={profile}
+          onClose={() => setSettingsOpen(false)}
+          onSave={updated => {
+            setProfile(prev => (prev ? { ...prev, ...updated } : prev))
+            setSettingsOpen(false)
+          }}
         />
       )}
     </div>

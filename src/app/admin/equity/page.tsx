@@ -187,13 +187,29 @@ export default function EquityPage() {
     if (!selected) return
     setSendingAgreement(true)
     const snapshot = stakes.map(s => ({ name: s.stakeholder_name, type: s.stakeholder_type, percentage: s.equity_percentage }))
-    await supabase.from('equity_agreements').insert({
+
+    // Insert agreement
+    const { data: agreementData } = await supabase.from('equity_agreements').insert({
       brand_member_id:       selected.id,
       agreement_html:        previewHtml,
       total_equity_snapshot: snapshot,
       status:                'pending',
       sent_at:               new Date().toISOString(),
-    })
+    }).select('id').single()
+
+    // Create notification for the member
+    if (agreementData?.id) {
+      await supabase.from('notifications').insert({
+        user_id:     selected.id,
+        type:        'agreement',
+        title:       'Equity Agreement Ready to Sign',
+        message:     `Your equity agreement for ${selected.brand_name || 'your brand'} has been sent. Please review and sign it.`,
+        action_type: 'sign_agreement',
+        action_data: { agreement_id: agreementData.id },
+        read:        false,
+      })
+    }
+
     setSendingAgreement(false)
     setPreviewOpen(false)
     setAgreementSent(true)
@@ -355,7 +371,7 @@ export default function EquityPage() {
 
                 {agreementSent && (
                   <div className="mt-4 p-3 bg-green-500/10 border border-green-500/20 rounded-xl flex items-center gap-2 text-green-400 text-sm">
-                    <CheckCircle size={14}/> Agreement sent — member will see it on their dashboard.
+                    <CheckCircle size={14}/> Agreement sent — member has been notified and will see it in their dashboard.
                   </div>
                 )}
               </div>

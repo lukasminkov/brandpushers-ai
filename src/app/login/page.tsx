@@ -17,16 +17,39 @@ export default function LoginPage() {
     setLoading(true)
     setError('')
 
+    // Check if email has an existing account/application
+    try {
+      const res = await fetch('/api/check-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      })
+      const { exists } = await res.json()
+      
+      if (!exists) {
+        setError('No account found with this email. Please apply first.')
+        setLoading(false)
+        return
+      }
+    } catch {
+      // If check fails, proceed anyway (fail open for usability)
+    }
+
     const supabase = createClient()
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
         emailRedirectTo: `${window.location.origin}/auth/callback`,
+        shouldCreateUser: false, // Don't create new users from login page
       },
     })
 
     if (error) {
-      setError(error.message)
+      if (error.message.includes('Signups not allowed')) {
+        setError('No account found with this email. Please apply first.')
+      } else {
+        setError(error.message)
+      }
       setLoading(false)
     } else {
       setSent(true)
