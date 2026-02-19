@@ -308,9 +308,12 @@ export default function EquityManager({ member }: { member: Member }) {
 
   const [cancellingId, setCancellingId] = useState<string | null>(null)
   const cancelAgreement = async (agreementId: string) => {
-    setCancellingId(null)
     const { error } = await supabase.from('equity_agreements').update({ status: 'cancelled' }).eq('id', agreementId)
-    if (!error) {
+    setCancellingId(null)
+    if (error) {
+      console.error('Cancel agreement error:', error)
+      alert('Failed to cancel: ' + error.message)
+    } else {
       setAgreements(prev => prev.map(a => a.id === agreementId ? { ...a, status: 'cancelled' } as EquityAgreement : a))
     }
   }
