@@ -225,14 +225,10 @@ export default function DocumentsPage() {
   }
 
   /* ── Agreement helpers ───────────────────────── */
-  const downloadAgreement = (agr: SignedAgreement) => {
-    const blob = new Blob([agr.agreement_html], { type: 'text/html' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `equity-agreement-${agr.signed_at ? new Date(agr.signed_at).toISOString().split('T')[0] : 'pending'}.html`
-    a.click()
-    URL.revokeObjectURL(url)
+  const downloadAgreement = async (agr: SignedAgreement) => {
+    const { downloadAgreementPdf } = await import('@/lib/downloadPdf')
+    const datePart = agr.signed_at ? new Date(agr.signed_at).toISOString().split('T')[0] : 'pending'
+    await downloadAgreementPdf(agr.agreement_html, `equity-agreement-${datePart}.pdf`)
   }
 
   const openSignModal = (agr: SignedAgreement) => {

@@ -293,17 +293,10 @@ export default function EquityManager({ member }: { member: Member }) {
     setViewAgreementOpen(true)
   }
 
-  const downloadAgreement = (a: EquityAgreement) => {
+  const downloadAgreement = async (a: EquityAgreement) => {
     if (!a.agreement_html) return
-    const blob = new Blob([a.agreement_html], { type: 'text/html' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `equity-agreement-${a.id.slice(0, 8)}-${a.status}.html`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
+    const { downloadAgreementPdf } = await import('@/lib/downloadPdf')
+    await downloadAgreementPdf(a.agreement_html, `equity-agreement-${a.id.slice(0, 8)}-${a.status}.pdf`)
   }
 
   const [cancellingId, setCancellingId] = useState<string | null>(null)
