@@ -135,6 +135,10 @@ export default function EquityPage() {
   const [viewAgreementOpen, setViewAgreementOpen] = useState(false)
   const [viewAgreementHtml, setViewAgreementHtml] = useState('')
 
+  // Inline edit stake
+  const [editingStakeId, setEditingStakeId] = useState<string | null>(null)
+  const [editPct, setEditPct] = useState('')
+
   /* Load members + admin profile */
   useEffect(() => {
     supabase.from('profiles').select('id,email,full_name,brand_name')
@@ -203,6 +207,17 @@ export default function EquityPage() {
     setSaving(false)
     setForm(EMPTY_FORM)
     setAddOpen(false)
+    loadMemberData(selected.id)
+  }
+
+  /* Save edited stake percentage */
+  const handleSavePct = async (id: string) => {
+    if (!selected) return
+    const val = parseFloat(editPct)
+    if (isNaN(val) || val < 0 || val > 100) return
+    await supabase.from('equity_stakes').update({ equity_percentage: val }).eq('id', id)
+    setEditingStakeId(null)
+    setEditPct('')
     loadMemberData(selected.id)
   }
 
@@ -508,8 +523,34 @@ export default function EquityPage() {
                           {s.stakeholder_address && <p className="text-xs text-gray-600 truncate max-w-xs">{s.stakeholder_address}</p>}
                         </div>
                         <div className="text-right shrink-0">
-                          <p className="text-xl font-bold tabular-nums" style={{ color: COLORS[i % COLORS.length] }}>{s.equity_percentage}%</p>
-                          <p className="text-[11px] text-gray-600 capitalize">{s.stakeholder_type}</p>
+                          {editingStakeId === s.id ? (
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                autoFocus
+                                type="number"
+                                min="0"
+                                max="100"
+                                step="0.5"
+                                value={editPct}
+                                onChange={e => setEditPct(e.target.value)}
+                                onKeyDown={e => { if (e.key === 'Enter') handleSavePct(s.id); if (e.key === 'Escape') setEditingStakeId(null) }}
+                                className="w-20 bg-[#1f1f1f] border border-white/10 rounded-lg px-2 py-1 text-sm text-white text-right focus:outline-none focus:border-[#F24822]/60"
+                              />
+                              <span className="text-sm text-gray-500">%</span>
+                              <button onClick={() => handleSavePct(s.id)} className="p-1 rounded-lg text-green-400 hover:bg-green-500/10 transition">
+                                <CheckCircle size={14}/>
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => { setEditingStakeId(s.id); setEditPct(String(s.equity_percentage)) }}
+                              className="text-right hover:opacity-70 transition cursor-pointer"
+                              title="Click to edit"
+                            >
+                              <p className="text-xl font-bold tabular-nums" style={{ color: COLORS[i % COLORS.length] }}>{s.equity_percentage}%</p>
+                              <p className="text-[11px] text-gray-600 capitalize">{s.stakeholder_type}</p>
+                            </button>
+                          )}
                         </div>
                         {!isMember && (
                           <button
