@@ -43,6 +43,7 @@ interface StepProgress {
 
 interface EquityAgreement {
   id: string; status: string; sent_at: string; signed_at: string | null
+  total_equity_snapshot: Array<{ name: string; type: string; percentage: number }> | null
 }
 
 interface EquityStake {
@@ -99,7 +100,7 @@ export default function DashboardPage() {
       supabase.from('phases').select('*').order('sort_order'),
       supabase.from('phase_steps').select('*').order('sort_order'),
       supabase.from('member_step_progress').select('step_id, completed').eq('user_id', user.id),
-      supabase.from('equity_agreements').select('id, status, sent_at, signed_at').eq('brand_member_id', user.id).order('created_at', { ascending: false }),
+      supabase.from('equity_agreements').select('id, status, sent_at, signed_at, total_equity_snapshot').eq('brand_member_id', user.id).order('created_at', { ascending: false }),
       supabase.from('equity_stakes').select('id, stakeholder_name, equity_percentage, stakeholder_type').eq('brand_member_id', user.id),
     ])
 
@@ -172,8 +173,12 @@ export default function DashboardPage() {
   const firstName = profile?.full_name?.split(' ')[0] || 'there'
   const pendingAgreement = agreements.find(a => a.status === 'pending')
   const signedAgreements = agreements.filter(a => a.status === 'signed')
-  const hasEquity = profile?.equity_percentage != null || stakes.length > 0
-  const totalStakesPct = stakes.reduce((s, e) => s + Number(e.equity_percentage), 0)
+  // Use the most recent SIGNED agreement's snapshot as the official equity
+  const latestSigned = signedAgreements[0]
+  const officialStakes = latestSigned?.total_equity_snapshot || []
+  const hasEquity = officialStakes.length > 0 || profile?.equity_percentage != null
+  const totalStakesPct = officialStakes.reduce((s, e) => s + Number(e.percentage), 0)
+  const hasPendingChanges = pendingAgreement != null
 
   return (
     <div className="p-6 lg:p-8 space-y-6">
@@ -261,21 +266,24 @@ export default function DashboardPage() {
                 : <Empty text="Not yet registered" />}
             </div>
 
-            {/* Shareholders */}
-            {stakes.length > 0 && (
+            {/* Shareholders — from latest signed agreement */}
+            {officialStakes.length > 0 && (
               <div className="col-span-2">
-                <p className="text-[10px] font-semibold text-gray-600 uppercase tracking-wider mb-2">Shareholders</p>
+                <p className="text-[10px] font-semibold text-gray-600 uppercase tracking-wider mb-2">Shareholders <span className="text-gray-700 font-normal">(per signed agreement)</span></p>
                 <div className="flex flex-wrap gap-2">
-                  {stakes.map((s, i) => (
-                    <div key={s.id} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs"
+                  {officialStakes.map((s, i) => (
+                    <div key={s.name} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs"
                       style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
                     >
                       <div className="w-1.5 h-1.5 rounded-full" style={{ background: COLORS[i % COLORS.length] }} />
-                      <span className="text-gray-300">{s.stakeholder_name}</span>
-                      <span className="font-semibold" style={{ color: COLORS[i % COLORS.length] }}>{s.equity_percentage}%</span>
+                      <span className="text-gray-300">{s.name}</span>
+                      <span className="font-semibold" style={{ color: COLORS[i % COLORS.length] }}>{s.percentage}%</span>
                     </div>
                   ))}
                 </div>
+                {hasPendingChanges && (
+                  <p className="text-[10px] text-yellow-400 mt-2">⏳ An amendment is pending your signature — equity may change once signed.</p>
+                )}
               </div>
             )}
           </div>
@@ -300,39 +308,45 @@ export default function DashboardPage() {
           {!hasEquity && agreements.length === 0 ? (
             <div className="py-6 text-center text-gray-600">
               <Megaphone size={28} className="mx-auto mb-2 opacity-20" />
-              <p className="text-sm">Equity details will appear once your cap table is set up.</p>
+              <p className="text-sm">Equity details will appear once your first agreement is signed.</p>
+            </div>
+          ) : officialStakes.length === 0 && pendingAgreement ? (
+            <div className="space-y-3">
+              <div className="flex items-center gap-3 p-3 rounded-xl" style={{ background: 'rgba(242,72,34,0.08)', border: '1px solid rgba(242,72,34,0.2)' }}>
+                <Bell size={14} style={{ color: '#F24822' }} className="shrink-0" />
+                <div>
+                  <p className="text-xs font-medium text-white">Agreement pending your signature</p>
+                  <p className="text-[10px] text-gray-500">Equity terms will be finalized once signed. Check notifications.</p>
+                </div>
+              </div>
             </div>
           ) : (
             <div className="space-y-4">
-              {profile?.equity_percentage != null && (
-                <div className="p-4 rounded-xl" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
-                  <p className="text-xs text-gray-500 mb-1">BrandPushers equity stake</p>
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-3xl font-bold text-white">{profile.equity_percentage}%</span>
-                  </div>
-                </div>
-              )}
-              {stakes.length > 0 && (
+              {/* Cap table bar — from signed agreement */}
+              {officialStakes.length > 0 && (
                 <div>
                   <div className="w-full h-4 rounded-full overflow-hidden flex" style={{ background: 'rgba(255,255,255,0.04)' }}>
-                    {stakes.map((s, i) => (
-                      <div key={s.id} style={{ width: `${s.equity_percentage}%`, background: COLORS[i % COLORS.length], minWidth: s.equity_percentage > 0 ? 2 : 0 }} title={`${s.stakeholder_name}: ${s.equity_percentage}%`} />
+                    {officialStakes.map((s, i) => (
+                      <div key={s.name} style={{ width: `${s.percentage}%`, background: COLORS[i % COLORS.length], minWidth: s.percentage > 0 ? 2 : 0 }} title={`${s.name}: ${s.percentage}%`} />
                     ))}
                   </div>
                   <div className="flex flex-wrap gap-2 mt-2">
-                    {stakes.map((s, i) => (
-                      <div key={s.id} className="flex items-center gap-1.5">
+                    {officialStakes.map((s, i) => (
+                      <div key={s.name} className="flex items-center gap-1.5">
                         <div className="w-2 h-2 rounded-full" style={{ background: COLORS[i % COLORS.length] }} />
-                        <span className="text-[11px] text-gray-400">{s.stakeholder_name} <span className="font-semibold" style={{ color: COLORS[i % COLORS.length] }}>{s.equity_percentage}%</span></span>
+                        <span className="text-[11px] text-gray-400">{s.name} <span className="font-semibold" style={{ color: COLORS[i % COLORS.length] }}>{s.percentage}%</span></span>
                       </div>
                     ))}
                   </div>
+                  {latestSigned?.signed_at && (
+                    <p className="text-[10px] text-gray-600 mt-2">As of signed agreement · {new Date(latestSigned.signed_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</p>
+                  )}
                 </div>
               )}
               {pendingAgreement && (
-                <div className="flex items-center gap-3 p-3 rounded-xl" style={{ background: 'rgba(242,72,34,0.08)', border: '1px solid rgba(242,72,34,0.2)' }}>
-                  <Bell size={14} style={{ color: '#F24822' }} className="shrink-0" />
-                  <p className="text-xs text-white">Agreement pending signature</p>
+                <div className="flex items-center gap-3 p-3 rounded-xl" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}>
+                  <Bell size={14} style={{ color: '#F59E0B' }} className="shrink-0" />
+                  <p className="text-xs text-white">Amendment pending — equity may change once signed</p>
                 </div>
               )}
               {signedAgreements.length > 0 && (
