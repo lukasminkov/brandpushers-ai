@@ -87,7 +87,7 @@ export default function MembersPage() {
         brand_name: p.brand_name,
         onboarding_completed: p.onboarding_completed ?? false,
         created_at: p.created_at,
-        latest_equity_pct: equityMap[p.id] ?? (stakeMap[p.id] ? stakeMap[p.id] : null),
+        latest_equity_pct: stakeMap[p.id] !== undefined ? stakeMap[p.id] : (equityMap[p.id] ?? null),
       }))
 
       setMembers(rows)
