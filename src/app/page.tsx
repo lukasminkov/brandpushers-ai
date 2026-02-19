@@ -1,18 +1,20 @@
-import Navbar from '@/components/Navbar'
-import Hero from '@/components/Hero'
-import WhatWeDo from '@/components/WhatWeDo'
-import WhyUs from '@/components/WhyUs'
-import ApplicationForm from '@/components/ApplicationForm'
-import Footer from '@/components/Footer'
+import Navbar from '@/components/landing/Navbar'
+import Hero from '@/components/landing/Hero'
+import Journey from '@/components/landing/Journey'
+import WhyUs from '@/components/landing/WhyUs'
+import Stats from '@/components/landing/Stats'
+import ContactForm from '@/components/landing/ContactForm'
+import Footer from '@/components/landing/Footer'
 
 export default function Home() {
   return (
-    <main className="min-h-screen bg-[var(--bg-dark)]">
+    <main className="min-h-screen bg-[#0a0a0f] text-white">
       <Navbar />
       <Hero />
-      <WhatWeDo />
+      <Journey />
+      <Stats />
       <WhyUs />
-      <ApplicationForm />
+      <ContactForm />
       <Footer />
     </main>
   )
