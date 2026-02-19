@@ -13,8 +13,8 @@ export default function Footer() {
         </div>
 
         <div className="flex items-center gap-6 text-sm text-gray-500">
-          <a href="#" className="hover:text-white transition">Privacy</a>
-          <a href="#" className="hover:text-white transition">Terms</a>
+          <a href="/privacy" className="hover:text-white transition">Privacy Policy</a>
+          <a href="/terms" className="hover:text-white transition">Terms of Service</a>
           <a href="https://calendly.com/brandpushers" target="_blank" rel="noopener noreferrer" className="hover:text-white transition">Book a Call</a>
         </div>
 
