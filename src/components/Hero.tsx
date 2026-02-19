@@ -20,7 +20,7 @@ export default function Hero() {
           transition={{ duration: 0.8 }}
         >
           <div className="inline-block mb-6 px-4 py-2 rounded-full glass text-sm text-gray-300">
-            🚀 TikTok-First Brand Incubator
+            🚀 Brand Accelerator &amp; Equity Partner
           </div>
         </motion.div>
 
@@ -28,20 +28,31 @@ export default function Hero() {
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, delay: 0.2 }}
-          className="text-5xl md:text-7xl lg:text-8xl font-black leading-tight mb-6"
+          className="text-4xl md:text-6xl lg:text-7xl font-black leading-tight mb-6"
         >
-          SUPERCHARGE YOUR{' '}
-          <span className="bg-logo-gradient bg-clip-text text-transparent">BRAND IDEA</span>
+          WE DON&apos;T BUILD BRANDS{' '}
+          <span className="bg-logo-gradient bg-clip-text text-transparent">FOR YOU.</span>
+          <br />
+          WE BUILD THEM{' '}
+          <span className="bg-logo-gradient bg-clip-text text-transparent">WITH YOU.</span>
         </motion.h1>
 
         <motion.p
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, delay: 0.4 }}
-          className="text-xl md:text-2xl text-gray-400 mb-10 max-w-3xl mx-auto"
+          className="text-xl md:text-2xl text-gray-400 mb-4 max-w-3xl mx-auto"
         >
-          We build, launch & scale your brand from zero to viral — starting on TikTok. 
-          Join our incubator and let&apos;s create something extraordinary together.
+          BrandPushers is a brand accelerator that takes an equity stake in your company and goes all-in alongside you — from first idea to profitable exit.
+        </motion.p>
+
+        <motion.p
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, delay: 0.5 }}
+          className="text-base md:text-lg text-gray-500 mb-10 max-w-2xl mx-auto"
+        >
+          TikTok-first. AI-powered. Founder-aligned. We only win when you win.
         </motion.p>
 
         <motion.div
@@ -51,18 +62,29 @@ export default function Hero() {
           className="flex flex-col sm:flex-row gap-4 justify-center"
         >
           <a
-            href="#apply"
+            href="https://calendly.com/brandpushers"
+            target="_blank"
+            rel="noopener noreferrer"
             className="px-8 py-4 bg-brand-orange text-white font-bold rounded-xl text-lg hover:scale-105 transition-transform animate-pulse-glow"
           >
-            Apply Now
+            Book an Intro Call
           </a>
           <a
             href="#what-we-do"
             className="px-8 py-4 glass text-white font-bold rounded-xl text-lg hover:bg-white/10 transition"
           >
-            Learn More
+            See How It Works
           </a>
         </motion.div>
+
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.8, delay: 0.8 }}
+          className="mt-6 text-sm text-gray-600"
+        >
+          Selective intake — we partner with a limited number of founders each quarter.
+        </motion.p>
 
         {/* Stats */}
         <motion.div
@@ -72,9 +94,9 @@ export default function Hero() {
           className="mt-20 grid grid-cols-3 gap-8 max-w-2xl mx-auto"
         >
           {[
-            { value: '50+', label: 'Brands Launched' },
-            { value: '10M+', label: 'Views Generated' },
-            { value: '95%', label: 'Success Rate' },
+            { value: 'Idea', label: 'Where You Start' },
+            { value: '→', label: 'The Journey' },
+            { value: 'Exit', label: 'Where We Aim' },
           ].map((stat) => (
             <div key={stat.label} className="text-center">
               <div className="text-3xl md:text-4xl font-black bg-logo-gradient bg-clip-text text-transparent">{stat.value}</div>

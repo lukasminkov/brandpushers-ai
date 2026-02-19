@@ -3,14 +3,14 @@ import { motion } from 'framer-motion'
 import { CheckCircle } from 'lucide-react'
 
 const reasons = [
-  'TikTok-first approach — we go where the attention is',
-  'Proven playbook that has launched 50+ successful brands',
-  'Full-service: strategy, content, ads, analytics, and community',
-  'Equity partnership — we have skin in the game',
-  'Dedicated team assigned to your brand',
-  'Data-driven decisions, not guesswork',
-  'Network of influencers and creators ready to collaborate',
-  'Weekly check-ins and transparent reporting',
+  'Equity partnership — we only win when you win',
+  'AI-native from day one: tools, workflows, and automation built in at every stage',
+  'TikTok & social commerce specialists — we go where the attention and revenue is',
+  'End-to-end: we stay with you from idea all the way through to exit',
+  'Selective intake — we say no to most applicants so we can go all-in on the ones we pick',
+  'Hands-on co-builders, not consultants — we\'re in the trenches with you',
+  'Network of creators, influencers, and brand operators ready to activate',
+  'Proven playbook refined across multiple brand launches and exits',
 ]
 
 export default function WhyUs() {
@@ -27,15 +27,22 @@ export default function WhyUs() {
             viewport={{ once: true }}
           >
             <h2 className="text-4xl md:text-5xl font-black mb-6">
-              Why Choose{' '}
+              Why Partner With{' '}
               <span className="bg-logo-gradient bg-clip-text text-transparent">BrandPushers</span>?
             </h2>
-            <p className="text-gray-400 text-lg mb-8">
-              We&apos;re not just consultants — we&apos;re co-builders. We take equity because we believe in what we build together.
-              Your success is literally our success.
+            <p className="text-gray-400 text-lg mb-4">
+              We&apos;re not an agency. We&apos;re not a service. We&apos;re equity partners who put our own resources, time, and expertise on the line alongside you.
             </p>
-            <a href="#apply" className="inline-block px-8 py-4 bg-brand-orange text-white font-bold rounded-xl hover:scale-105 transition-transform">
-              Start Your Journey
+            <p className="text-gray-500 text-base mb-8">
+              Because we take equity, we are ruthlessly selective about who we partner with — and relentlessly committed to those we do. If we accept you, we&apos;re all in.
+            </p>
+            <a
+              href="https://calendly.com/brandpushers"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-block px-8 py-4 bg-brand-orange text-white font-bold rounded-xl hover:scale-105 transition-transform"
+            >
+              Book an Intro Call
             </a>
           </motion.div>
 
