@@ -50,9 +50,9 @@ export default function Navbar() {
           ))}
           <a
             href="/login"
-            className="text-sm text-gray-400 hover:text-white transition-colors duration-200"
+            className="text-sm text-gray-500 hover:text-gray-300 transition-colors duration-200"
           >
-            Sign In
+            Already applied?
           </a>
           <a
             href="#apply"
@@ -94,9 +94,9 @@ export default function Navbar() {
               <a
                 href="/login"
                 onClick={() => setMenuOpen(false)}
-                className="text-gray-400 hover:text-white transition py-1"
+                className="text-gray-500 hover:text-gray-300 transition py-1 text-sm"
               >
-                Member Sign In
+                Already applied? Sign in
               </a>
               <a
                 href="#apply"

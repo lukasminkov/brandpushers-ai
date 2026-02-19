@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import Link from 'next/link'
-import { Mail, ArrowLeft, CheckCircle } from 'lucide-react'
+import { Mail, ArrowLeft, CheckCircle, Clock } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 
 export default function LoginPage() {
@@ -36,18 +36,18 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center px-4 relative overflow-hidden">
-      {/* Background */}
+      {/* Background glows */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
           background:
-            'radial-gradient(ellipse at 50% 30%, rgba(155, 14, 229, 0.12) 0%, transparent 70%)',
+            'radial-gradient(ellipse at 50% 30%, rgba(155, 14, 229, 0.10) 0%, transparent 70%)',
         }}
       />
       <div
         className="absolute bottom-0 right-1/4 w-96 h-96 pointer-events-none"
         style={{
-          background: 'radial-gradient(circle, rgba(242, 72, 34, 0.08) 0%, transparent 70%)',
+          background: 'radial-gradient(circle, rgba(242, 72, 34, 0.07) 0%, transparent 70%)',
           filter: 'blur(40px)',
         }}
       />
@@ -58,7 +58,7 @@ export default function LoginPage() {
         transition={{ duration: 0.5 }}
         className="relative z-10 w-full max-w-md"
       >
-        {/* Back link */}
+        {/* Back to home */}
         <Link
           href="/"
           className="inline-flex items-center gap-2 text-sm text-white/40 hover:text-white/70 transition-colors mb-8"
@@ -77,7 +77,7 @@ export default function LoginPage() {
         >
           {/* Logo */}
           <div className="flex items-center gap-2 mb-8">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#9B0EE5] to-[#F57B18] flex items-center justify-center">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#9B0EE5] to-[#F24822] flex items-center justify-center">
               <span className="text-white font-bold text-sm">B</span>
             </div>
             <span className="font-semibold text-white">
@@ -87,10 +87,18 @@ export default function LoginPage() {
 
           {!sent ? (
             <>
-              <h1 className="text-2xl font-bold text-white mb-2">Welcome back</h1>
-              <p className="text-white/50 text-sm mb-8">
-                Enter your email and we&apos;ll send you a magic link to sign in instantly — no password needed.
-              </p>
+              <div className="mb-8">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/[0.04] border border-white/[0.08] text-xs text-gray-400 mb-4">
+                  <Clock size={11} className="text-[#F24822]" />
+                  Members &amp; applicants only
+                </div>
+                <h1 className="text-2xl font-bold text-white mb-2">
+                  Already Applied?
+                </h1>
+                <p className="text-white/50 text-sm leading-relaxed">
+                  Enter your email to receive a magic link. Check on your application status, or — if you&apos;ve been approved — access your member dashboard.
+                </p>
+              </div>
 
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
@@ -132,16 +140,15 @@ export default function LoginPage() {
                 </button>
               </form>
 
-              <p className="text-xs text-white/30 text-center mt-6">
-                By signing in, you agree to our{' '}
-                <Link href="#" className="text-white/50 hover:text-white/70 underline">
-                  Terms
-                </Link>{' '}
-                and{' '}
-                <Link href="#" className="text-white/50 hover:text-white/70 underline">
-                  Privacy Policy
-                </Link>
-              </p>
+              {/* Divider + apply CTA */}
+              <div className="mt-8 pt-6 border-t border-white/[0.06] text-center">
+                <p className="text-xs text-white/30">
+                  Haven&apos;t applied yet?{' '}
+                  <Link href="/#apply" className="text-white/50 hover:text-white/80 underline transition">
+                    Apply for a spot
+                  </Link>
+                </p>
+              </div>
             </>
           ) : (
             <motion.div
@@ -153,10 +160,13 @@ export default function LoginPage() {
                 <CheckCircle size={32} className="text-green-400" />
               </div>
               <h2 className="text-xl font-bold text-white mb-2">Check your inbox</h2>
-              <p className="text-white/50 text-sm leading-relaxed">
+              <p className="text-white/50 text-sm leading-relaxed mb-6">
                 We sent a magic link to{' '}
-                <span className="text-white font-medium">{email}</span>.
-                Click the link to sign in — it expires in 10 minutes.
+                <span className="text-white font-medium">{email}</span>.{' '}
+                Click it to sign in — link expires in 10 minutes.
+              </p>
+              <p className="text-xs text-white/30">
+                You&apos;ll be redirected based on your application status automatically.
               </p>
               <button
                 onClick={() => setSent(false)}
