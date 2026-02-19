@@ -15,9 +15,29 @@ interface Application {
   profiles?: { email: string; full_name: string } | null
 }
 
+type TabKey = 'pending' | 'approved' | 'rejected'
+
+function Tab({ active, label, count, onClick }: { active: boolean; label: string; count: number; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`px-4 py-2.5 text-sm font-medium rounded-xl transition-all cursor-pointer ${
+        active ? 'text-white' : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'
+      }`}
+      style={active ? { background: 'rgba(242,72,34,0.12)', border: '1px solid rgba(242,72,34,0.2)' } : {}}
+    >
+      {label}
+      <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full" style={{ background: active ? 'rgba(242,72,34,0.2)' : 'rgba(255,255,255,0.08)' }}>
+        {count}
+      </span>
+    </button>
+  )
+}
+
 export default function AdminPage() {
   const [apps, setApps] = useState<Application[]>([])
   const [loading, setLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState<TabKey>('pending')
   const supabase = createClient()
 
   const load = async () => {
@@ -33,7 +53,6 @@ export default function AdminPage() {
     await supabase.from('applications').update({ status }).eq('id', app.id)
     if (status === 'approved') {
       await supabase.from('profiles').update({ role: 'member', approved_at: new Date().toISOString() }).eq('id', app.user_id)
-      // Fire-and-forget approval email
       fetch('/api/send-approval-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -50,6 +69,14 @@ export default function AdminPage() {
     load()
   }
 
+  const counts = {
+    pending: apps.filter(a => a.status === 'pending').length,
+    approved: apps.filter(a => a.status === 'approved').length,
+    rejected: apps.filter(a => a.status === 'rejected').length,
+  }
+
+  const filtered = apps.filter(a => a.status === activeTab)
+
   if (loading) return (
     <div className="flex items-center justify-center h-64">
       <div className="spinner" />
@@ -63,14 +90,21 @@ export default function AdminPage() {
         <p className="text-sm text-gray-500 mt-1">Review and manage incoming applications</p>
       </div>
 
-      {apps.length === 0 ? (
+      {/* Tabs */}
+      <div className="flex gap-1 mb-6">
+        <Tab active={activeTab === 'pending'} label="Pending" count={counts.pending} onClick={() => setActiveTab('pending')} />
+        <Tab active={activeTab === 'approved'} label="Approved" count={counts.approved} onClick={() => setActiveTab('approved')} />
+        <Tab active={activeTab === 'rejected'} label="Denied" count={counts.rejected} onClick={() => setActiveTab('rejected')} />
+      </div>
+
+      {filtered.length === 0 ? (
         <div className="rounded-2xl p-12 text-center" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
           <Inbox size={32} className="mx-auto mb-3 text-gray-600" />
-          <p className="text-gray-500">No applications yet</p>
+          <p className="text-gray-500">No {activeTab} applications</p>
         </div>
       ) : (
         <div className="space-y-3">
-          {apps.map(app => (
+          {filtered.map(app => (
             <div
               key={app.id}
               className="rounded-2xl p-5 transition-all duration-200"

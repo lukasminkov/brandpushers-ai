@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
-import { LayoutDashboard, FileText, LogOut, Bell, Settings, Menu, X } from 'lucide-react'
+import { LayoutDashboard, FileText, Wrench, LogOut, Bell, Settings, Menu, X } from 'lucide-react'
 import OnboardingWizard from '@/components/onboarding/OnboardingWizard'
 import NotificationsPanel from '@/components/dashboard/NotificationsPanel'
 import SettingsModal from '@/components/dashboard/SettingsModal'
@@ -97,6 +97,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const nav = [
     { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { href: '/dashboard/documents', icon: FileText, label: 'Documents' },
+    { href: '/dashboard/tools', icon: Wrench, label: 'Tools' },
   ]
 
   const initial = (profile?.full_name || profile?.brand_name || 'M').charAt(0).toUpperCase()
