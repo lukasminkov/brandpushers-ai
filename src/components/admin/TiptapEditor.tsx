@@ -49,7 +49,7 @@ export default function TiptapEditor({ content, onChange, placeholder = 'Write s
     <button
       type="button"
       title={title}
-      onClick={() => action()}
+      onMouseDown={(e) => { e.preventDefault(); action(); }}
       className={`p-1.5 rounded transition ${isActive ? 'bg-brand-orange text-white' : 'text-gray-400 hover:text-white hover:bg-white/10'}`}
     >
       {icon}
