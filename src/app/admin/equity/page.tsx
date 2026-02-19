@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import AdminModal from '@/components/admin/AdminModal'
 import {
   Users, Plus, Trash2, Send, Eye, X, ChevronRight, Building2,
-  User, Percent, CheckCircle, AlertCircle, FileText, Clock, RefreshCw
+  User, Percent, CheckCircle, AlertCircle, FileText, Clock, RefreshCw, Download, BadgeCheck
 } from 'lucide-react'
 
 /* ─── Types ─────────────────────────────────────────────── */
@@ -20,7 +20,7 @@ interface EquityStake {
 }
 interface EquityAgreement {
   id: string; status: 'pending' | 'signed' | 'expired' | 'revoked'
-  sent_at: string; signed_at: string | null
+  sent_at: string; signed_at: string | null; agreement_html?: string
 }
 interface AddForm {
   stakeholder_name: string; stakeholder_type: 'individual' | 'company'
@@ -123,16 +123,30 @@ export default function EquityPage() {
   const [form,    setForm]    = useState<AddForm>(EMPTY_FORM)
   const [saving,  setSaving]  = useState(false)
 
+  // Admin profile name
+  const [adminName, setAdminName] = useState('WHUT.AI LLC')
+
   // Preview + send modal
   const [previewOpen,      setPreviewOpen]      = useState(false)
   const [previewHtml,      setPreviewHtml]      = useState('')
   const [sendingAgreement, setSendingAgreement] = useState(false)
 
-  /* Load members */
+  // View agreement modal
+  const [viewAgreementOpen, setViewAgreementOpen] = useState(false)
+  const [viewAgreementHtml, setViewAgreementHtml] = useState('')
+
+  /* Load members + admin profile */
   useEffect(() => {
     supabase.from('profiles').select('id,email,full_name,brand_name')
       .eq('role','member').order('full_name')
       .then(({ data }) => { setMembers((data || []) as Member[]); setLoading(false) })
+    // Fetch current admin's name
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) {
+        supabase.from('profiles').select('full_name').eq('id', user.id).single()
+          .then(({ data: p }) => { if (p?.full_name) setAdminName(p.full_name) })
+      }
+    })
   }, [supabase])
 
   /* Load stakes + agreements */
@@ -140,13 +154,32 @@ export default function EquityPage() {
     setStakesLoading(true)
     const [{ data: s }, { data: a }] = await Promise.all([
       supabase.from('equity_stakes').select('*').eq('brand_member_id', memberId).order('equity_percentage', { ascending: false }),
-      supabase.from('equity_agreements').select('id,status,sent_at,signed_at').eq('brand_member_id', memberId).order('created_at', { ascending: false }),
+      supabase.from('equity_agreements').select('id,status,sent_at,signed_at,agreement_html').eq('brand_member_id', memberId).order('created_at', { ascending: false }),
     ])
-    setStakes((s || []) as EquityStake[])
+    const stakesList = (s || []) as EquityStake[]
+    // Auto-create member as stakeholder if not present
+    const member = members.find(m => m.id === memberId)
+    if (member) {
+      const memberName = member.full_name || member.email
+      const hasMemberStake = stakesList.some(
+        st => st.stakeholder_name === memberName || st.stakeholder_email === member.email
+      )
+      if (!hasMemberStake) {
+        const { data: newStake } = await supabase.from('equity_stakes').insert({
+          brand_member_id: memberId,
+          stakeholder_name: memberName,
+          stakeholder_type: 'individual',
+          stakeholder_email: member.email,
+          equity_percentage: 0,
+        }).select('*').single()
+        if (newStake) stakesList.unshift(newStake as EquityStake)
+      }
+    }
+    setStakes(stakesList)
     setAgreements((a || []) as EquityAgreement[])
     setStakesLoading(false)
     setAgreementSent(false)
-  }, [supabase])
+  }, [supabase, members])
 
   useEffect(() => { if (selected) loadMemberData(selected.id) }, [selected, loadMemberData])
 
@@ -194,10 +227,10 @@ export default function EquityPage() {
     const date = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
     let result = html
 
-    // Sign WHUT.AI LLC line
+    // Sign WHUT.AI LLC line with admin's personal name
     result = result.replace(
       /(<div class="sig-line"[^>]*data-role="admin"[^>]*>)<p>_________________________________<\/p>([\s\S]*?)<p class="sig-label">Date: ___________________<\/p>/,
-      `$1<p style="font-family:'Brush Script MT',cursive;font-size:24px;color:#1a1a1a;margin:0">WHUT.AI LLC</p>$2<p class="sig-label">Date: ${date}</p><p class="sig-label" style="color:#10b981;font-size:11px">✓ Signed by BrandPushers Admin · ${new Date().toISOString()}</p>`
+      `$1<p style="font-family:'Brush Script MT',cursive;font-size:24px;color:#1a1a1a;margin:0">${adminName}</p><p style="font-size:12px;color:#6b7280;margin:2px 0 0 0">on behalf of WHUT.AI LLC (BrandPushers)</p>$2<p class="sig-label">Date: ${date}</p><p class="sig-label" style="color:#10b981;font-size:11px">✓ Signed by ${adminName} · ${new Date().toISOString()}</p>`
     )
 
     // Sign all stakeholder lines EXCEPT the member's
@@ -251,6 +284,34 @@ export default function EquityPage() {
     setPreviewOpen(false)
     setAgreementSent(true)
     loadMemberData(selected.id)
+  }
+
+  /* Check if a stake belongs to the selected member */
+  const isMemberStake = (s: EquityStake): boolean => {
+    if (!selected) return false
+    const memberName = selected.full_name || selected.email
+    return s.stakeholder_name === memberName || s.stakeholder_email === selected.email
+  }
+
+  /* View agreement HTML */
+  const viewAgreement = (a: EquityAgreement) => {
+    if (!a.agreement_html) return
+    setViewAgreementHtml(a.agreement_html)
+    setViewAgreementOpen(true)
+  }
+
+  /* Download agreement as HTML file */
+  const downloadAgreement = (a: EquityAgreement) => {
+    if (!a.agreement_html) return
+    const blob = new Blob([a.agreement_html], { type: 'text/html' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `equity-agreement-${a.id.slice(0, 8)}-${a.status}.html`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
   }
 
   const statusBadge = (s: string) => {
@@ -425,14 +486,23 @@ export default function EquityPage() {
                   </div>
                 ) : (
                   <div className="divide-y divide-white/[0.04]">
-                    {stakes.map((s, i) => (
-                      <div key={s.id} className="px-5 py-4 flex items-center gap-4 hover:bg-white/[0.02] group transition-colors">
+                    {stakes.map((s, i) => {
+                      const isMember = isMemberStake(s)
+                      return (
+                      <div key={s.id} className={`px-5 py-4 flex items-center gap-4 hover:bg-white/[0.02] group transition-colors ${isMember ? 'bg-brand-orange/[0.03]' : ''}`}>
                         <div className="w-1 h-10 rounded-full shrink-0" style={{ background: COLORS[i % COLORS.length] }}/>
                         <div className="w-8 h-8 rounded-lg bg-white/[0.04] border border-white/[0.06] flex items-center justify-center shrink-0">
                           {s.stakeholder_type === 'company' ? <Building2 size={14} className="text-gray-400"/> : <User size={14} className="text-gray-400"/>}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="font-semibold text-sm">{s.stakeholder_name}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="font-semibold text-sm">{s.stakeholder_name}</p>
+                            {isMember && (
+                              <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full font-semibold bg-brand-orange/15 text-brand-orange border border-brand-orange/30">
+                                <BadgeCheck size={10}/> Member
+                              </span>
+                            )}
+                          </div>
                           {s.stakeholder_company_name && <p className="text-xs text-gray-500">Co: {s.stakeholder_company_name}</p>}
                           {s.stakeholder_email && <p className="text-xs text-gray-500">{s.stakeholder_email}</p>}
                           {s.stakeholder_address && <p className="text-xs text-gray-600 truncate max-w-xs">{s.stakeholder_address}</p>}
@@ -441,14 +511,18 @@ export default function EquityPage() {
                           <p className="text-xl font-bold tabular-nums" style={{ color: COLORS[i % COLORS.length] }}>{s.equity_percentage}%</p>
                           <p className="text-[11px] text-gray-600 capitalize">{s.stakeholder_type}</p>
                         </div>
-                        <button
-                          onClick={() => handleDelete(s.id)}
-                          className="p-1.5 rounded-lg text-gray-700 hover:text-red-400 hover:bg-red-500/10 transition opacity-0 group-hover:opacity-100"
-                        >
-                          <Trash2 size={14}/>
-                        </button>
+                        {!isMember && (
+                          <button
+                            onClick={() => handleDelete(s.id)}
+                            className="p-1.5 rounded-lg text-gray-700 hover:text-red-400 hover:bg-red-500/10 transition opacity-0 group-hover:opacity-100"
+                          >
+                            <Trash2 size={14}/>
+                          </button>
+                        )}
+                        {isMember && <div className="w-[30px]"/>}
                       </div>
-                    ))}
+                      )
+                    })}
                     <div className="px-5 py-3 flex justify-between items-center bg-white/[0.02]">
                       <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Total</span>
                       <span className={`text-base font-bold tabular-nums ${capValid ? 'text-green-400' : 'text-yellow-400'}`}>
@@ -476,6 +550,24 @@ export default function EquityPage() {
                             Sent {new Date(a.sent_at).toLocaleDateString()}
                             {a.signed_at && <span className="text-green-500 ml-2">• Signed {new Date(a.signed_at).toLocaleDateString()}</span>}
                           </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {a.agreement_html && (
+                            <>
+                              <button
+                                onClick={() => viewAgreement(a)}
+                                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-gray-400 hover:text-white bg-white/[0.04] border border-white/[0.06] hover:bg-white/[0.08] transition"
+                              >
+                                <Eye size={12}/> View
+                              </button>
+                              <button
+                                onClick={() => downloadAgreement(a)}
+                                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-gray-400 hover:text-white bg-white/[0.04] border border-white/[0.06] hover:bg-white/[0.08] transition"
+                              >
+                                <Download size={12}/> Download
+                              </button>
+                            </>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -664,6 +756,33 @@ export default function EquityPage() {
             <p>Double-check the cap table adds up to 100% before sending.</p>
             <p>The member&apos;s name and brand will appear in the final document.</p>
             <p>Once sent, the member signs on their dashboard — no email integration needed.</p>
+          </div>
+        </div>
+      </AdminModal>
+
+      {/* ══════════════════════════════════════════════════════
+          MODAL: View Agreement  (uses shared AdminModal)
+          ══════════════════════════════════════════════════════ */}
+      <AdminModal
+        open={viewAgreementOpen}
+        onClose={() => setViewAgreementOpen(false)}
+        title="Agreement"
+        subtitle="View the full agreement document"
+        size="xl"
+        footer={
+          <div className="flex justify-end">
+            <button
+              onClick={() => setViewAgreementOpen(false)}
+              className="px-5 py-2.5 rounded-xl text-sm font-medium text-gray-400 hover:text-white hover:bg-white/8 transition"
+            >
+              Close
+            </button>
+          </div>
+        }
+      >
+        <div className="rounded-xl overflow-hidden border border-white/10">
+          <div className="bg-white overflow-y-auto max-h-[60vh]">
+            <div dangerouslySetInnerHTML={{ __html: viewAgreementHtml }}/>
           </div>
         </div>
       </AdminModal>
