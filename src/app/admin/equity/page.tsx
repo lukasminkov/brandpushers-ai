@@ -50,10 +50,12 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 /* ─── Agreement HTML generator ───────────────────────────── */
-function generateAgreementHtml(member: Member, stakes: EquityStake[]): string {
+function generateAgreementHtml(member: Member, stakes: EquityStake[], amendmentNumber: number): string {
   const date = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
   const total = stakes.reduce((s, e) => s + Number(e.equity_percentage), 0)
   const brand = member.brand_name || '[Brand Name]'
+  const isAmendment = amendmentNumber > 0
+  const docTitle = isAmendment ? `Equity Agreement — Amendment ${amendmentNumber}` : 'Equity Agreement'
   const rows = stakes.map(s => `
     <tr>
       <td style="padding:10px 16px;font-weight:500">${s.stakeholder_name}</td>
@@ -61,6 +63,7 @@ function generateAgreementHtml(member: Member, stakes: EquityStake[]): string {
       <td style="padding:10px 16px;color:#6b7280">${s.stakeholder_email || '—'}</td>
       <td style="padding:10px 16px;text-align:right;font-weight:700;color:#F24822">${s.equity_percentage}%</td>
     </tr>`).join('')
+  const amendmentRef = isAmendment ? `<p style="color:#6b7280;font-size:14px;margin-top:8px">This amendment supersedes the original Equity Agreement${amendmentNumber > 1 ? ` and all prior amendments (1–${amendmentNumber - 1})` : ''} dated previously.</p>` : ''
   return `<!DOCTYPE html><html><head><meta charset="utf-8">
   <style>
     body{font-family:Georgia,serif;color:#111;max-width:800px;margin:0 auto;padding:40px 20px;line-height:1.7}
@@ -77,7 +80,7 @@ function generateAgreementHtml(member: Member, stakes: EquityStake[]): string {
     .badge{display:inline-block;background:#fff7f5;border:1px solid #F24822;color:#F24822;border-radius:4px;padding:2px 8px;font-size:12px;font-weight:600;margin-bottom:8px}
     .hbar{border-left:4px solid #F24822;padding-left:16px;margin-bottom:32px}
   </style></head><body>
-  <div class="hbar"><div class="badge">EQUITY AGREEMENT</div><h1>${brand}</h1><p style="color:#6b7280;margin:0">Equity Participation Agreement &amp; Cap Table</p></div>
+  <div class="hbar"><div class="badge">${isAmendment ? `AMENDMENT ${amendmentNumber}` : 'EQUITY AGREEMENT'}</div><h1>${brand}</h1><p style="color:#6b7280;margin:0">${docTitle}</p>${amendmentRef}</div>
   <p><strong>Date:</strong> ${date}</p>
   <p><strong>Participant:</strong> ${member.full_name || member.email}</p>
   <p><strong>Brand / Company:</strong> ${brand}</p>
@@ -180,7 +183,9 @@ export default function EquityPage() {
   /* Open agreement preview */
   const openPreview = () => {
     if (!selected) return
-    setPreviewHtml(generateAgreementHtml(selected, stakes))
+    // Count existing agreements (signed or pending) to determine amendment number
+    const amendmentNumber = agreements.length
+    setPreviewHtml(generateAgreementHtml(selected, stakes, amendmentNumber))
     setPreviewOpen(true)
   }
 
