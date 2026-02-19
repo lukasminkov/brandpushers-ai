@@ -33,6 +33,16 @@ export default function AdminPage() {
     await supabase.from('applications').update({ status }).eq('id', app.id)
     if (status === 'approved') {
       await supabase.from('profiles').update({ role: 'member', approved_at: new Date().toISOString() }).eq('id', app.user_id)
+      // Fire-and-forget approval email
+      fetch('/api/send-approval-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: app.email || app.profiles?.email,
+          name: app.name || app.profiles?.full_name,
+          brandName: app.answers?.brandName,
+        }),
+      }).catch(() => {})
     }
     if (status === 'rejected') {
       await supabase.from('profiles').update({ role: 'pending' }).eq('id', app.user_id)
