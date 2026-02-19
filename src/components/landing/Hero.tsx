@@ -9,7 +9,7 @@ const fadeUp = (delay = 0) => ({
 
 export default function Hero() {
   return (
-    <section className="relative min-h-screen flex items-center justify-center overflow-hidden pt-24 pb-20">
+    <section className="relative flex items-center justify-center overflow-hidden pt-32 pb-16">
       {/* Background gradient orbs */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute top-[15%] left-[20%] w-[500px] h-[500px] bg-[#9B0EE5]/15 rounded-full blur-[160px] animate-float" />
@@ -93,7 +93,7 @@ export default function Hero() {
           initial={{ opacity: 0, scale: 0.8 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 1.2, delay: 0.8, ease: [0.25, 0.4, 0.25, 1] as [number, number, number, number] }}
-          className="mt-20 mx-auto relative w-full max-w-2xl h-48"
+          className="mt-10 mx-auto relative w-full max-w-2xl h-24"
         >
           {/* Gradient line connecting Idea → Exit */}
           <div className="absolute top-1/2 left-[10%] right-[10%] h-px bg-gradient-to-r from-[#9B0EE5] via-[#F24822] to-[#F57B18] opacity-40" />
