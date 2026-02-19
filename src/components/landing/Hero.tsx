@@ -8,10 +8,10 @@ const fadeUp = (delay = 0) => ({
 })
 
 const stages = [
-  { label: 'Idea', desc: 'Validate & shape your vision', icon: '💡' },
-  { label: 'Launch', desc: 'Build, brand & go to market', icon: '🚀' },
-  { label: 'Scale', desc: 'Grow revenue with AI & TikTok', icon: '📈' },
-  { label: 'Exit', desc: 'Cash out — together', icon: '💰' },
+  { label: 'Idea', desc: 'Validate & refine', color: '#9B0EE5' },
+  { label: 'Launch', desc: 'Build & go live', color: '#C03A8E' },
+  { label: 'Scale', desc: 'AI + TikTok growth', color: '#F24822' },
+  { label: 'Exit', desc: 'Cash out together', color: '#F57B18' },
 ]
 
 export default function Hero() {
@@ -44,28 +44,23 @@ export default function Hero() {
           {...fadeUp(0.15)}
           className="text-[2.75rem] sm:text-5xl md:text-6xl lg:text-[4.5rem] font-black leading-[1.05] tracking-tight mb-7"
         >
-          Your Brand.{' '}
-          <span className="gradient-text">Our Skin in the Game.</span>
+          From Zero to{' '}
+          <span className="gradient-text">Exit.</span>
+          <br />
+          <span className="text-gray-400 text-[0.65em]">We build it with you.</span>
         </motion.h1>
 
         {/* Subtitle */}
         <motion.p
           {...fadeUp(0.3)}
-          className="text-lg md:text-xl text-gray-400 mb-3 max-w-3xl mx-auto leading-relaxed"
+          className="text-lg md:text-xl text-gray-400 mb-10 max-w-2xl mx-auto leading-relaxed"
         >
-          We take equity and go all-in alongside you — from first idea to profitable exit. AI-powered, TikTok-first, founder-aligned.
-        </motion.p>
-
-        <motion.p
-          {...fadeUp(0.4)}
-          className="text-base text-gray-500 mb-10 max-w-2xl mx-auto"
-        >
-          We only win when you win.
+          We take equity, embed AI into your operations, and go all-in alongside you. TikTok-first. Founder-aligned. No exits without you.
         </motion.p>
 
         {/* CTAs */}
         <motion.div
-          {...fadeUp(0.5)}
+          {...fadeUp(0.45)}
           className="flex flex-col sm:flex-row gap-4 justify-center mb-4"
         >
           <a
@@ -84,38 +79,67 @@ export default function Hero() {
         </motion.div>
 
         <motion.p
-          {...fadeUp(0.6)}
-          className="text-sm text-gray-600 mb-16"
+          {...fadeUp(0.55)}
+          className="text-sm text-gray-600 mb-20"
         >
           Selective intake — limited spots each quarter
         </motion.p>
 
-        {/* Journey visualization */}
+        {/* Journey — sleek pipeline visualization */}
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.7, ease: [0.25, 0.4, 0.25, 1] as [number, number, number, number] }}
+          transition={{ duration: 1, delay: 0.7, ease: [0.25, 0.4, 0.25, 1] as [number, number, number, number] }}
           className="relative max-w-3xl mx-auto"
         >
-          {/* Gradient line */}
-          <div className="absolute top-6 left-[12%] right-[12%] h-[2px] bg-gradient-to-r from-[#9B0EE5] via-[#F24822] to-[#F57B18] opacity-30 hidden sm:block" />
+          {/* The pipeline track */}
+          <div className="relative rounded-2xl border border-white/[0.06] bg-white/[0.02] backdrop-blur-sm p-1 overflow-hidden">
+            {/* Animated gradient sweep */}
+            <div className="absolute inset-0 bg-gradient-to-r from-[#9B0EE5]/0 via-[#F24822]/5 to-[#F57B18]/0 animate-[shimmer_3s_ease-in-out_infinite]" />
+            
+            <div className="relative grid grid-cols-4 gap-0">
+              {stages.map((stage, i) => (
+                <motion.div
+                  key={stage.label}
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 0.9 + i * 0.1, duration: 0.4 }}
+                  className="group relative flex flex-col items-center py-6 px-2 sm:px-4"
+                >
+                  {/* Glow dot */}
+                  <div className="relative mb-3">
+                    <div 
+                      className="w-3 h-3 rounded-full"
+                      style={{ 
+                        backgroundColor: stage.color,
+                        boxShadow: `0 0 20px ${stage.color}60, 0 0 40px ${stage.color}30`
+                      }}
+                    />
+                    {/* Pulse ring */}
+                    <div 
+                      className="absolute inset-0 rounded-full animate-ping opacity-20"
+                      style={{ backgroundColor: stage.color, animationDuration: `${2 + i * 0.5}s` }}
+                    />
+                  </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 sm:gap-4">
-            {stages.map((stage, i) => (
-              <motion.div
-                key={stage.label}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.9 + i * 0.12, duration: 0.5 }}
-                className="flex flex-col items-center text-center"
-              >
-                <div className="w-12 h-12 rounded-full bg-white/[0.06] border border-white/[0.1] flex items-center justify-center text-lg mb-3 relative z-10">
-                  {stage.icon}
-                </div>
-                <span className="text-sm font-bold text-white tracking-wide mb-1">{stage.label}</span>
-                <span className="text-xs text-gray-500 leading-snug">{stage.desc}</span>
-              </motion.div>
-            ))}
+                  {/* Connecting line to next */}
+                  {i < stages.length - 1 && (
+                    <div 
+                      className="absolute top-[2.15rem] left-[60%] w-[80%] h-px hidden sm:block"
+                      style={{
+                        background: `linear-gradient(to right, ${stage.color}40, ${stages[i + 1].color}40)`
+                      }}
+                    />
+                  )}
+
+                  <span className="text-sm sm:text-base font-bold text-white mb-1">{stage.label}</span>
+                  <span className="text-[10px] sm:text-xs text-gray-500 leading-tight">{stage.desc}</span>
+                </motion.div>
+              ))}
+            </div>
+
+            {/* Bottom gradient bar showing progression */}
+            <div className="h-[2px] bg-gradient-to-r from-[#9B0EE5] via-[#F24822] to-[#F57B18] opacity-60 rounded-b-full" />
           </div>
         </motion.div>
       </div>
