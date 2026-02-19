@@ -176,15 +176,21 @@ export default function DashboardPage() {
   const totalStakesPct = stakes.reduce((s, e) => s + Number(e.equity_percentage), 0)
 
   return (
-    <div className="max-w-4xl mx-auto p-6 lg:p-8 space-y-6">
+    <div className="p-6 lg:p-8 space-y-6">
 
       {/* ── Header ──────────────────────────────────── */}
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
         <h1 className="text-3xl font-bold text-white mb-1">
           Welcome back, <span style={{ background: 'linear-gradient(135deg, #9B0EE5, #F57B18)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>{firstName}</span>! 👋
         </h1>
-        <p className="text-gray-500 text-sm">Here's your BrandPushers partner dashboard.</p>
+        <p className="text-gray-500 text-sm">Here&apos;s your BrandPushers partner dashboard.</p>
       </motion.div>
+
+      {/* ── Two-column layout ──────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-6">
+
+      {/* ── LEFT COLUMN: Company + Equity ──────────── */}
+      <div className="space-y-6">
 
       {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
           CARD 1 — Company / Project Information
@@ -277,8 +283,90 @@ export default function DashboardPage() {
       </motion.div>
 
       {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-          CARD 2 — Program Progress
+          CARD 3 — Equity Overview (in left column)
           ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+        <Card>
+          <div className="flex items-center gap-3 mb-5">
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'rgba(242,72,34,0.1)', border: '1px solid rgba(242,72,34,0.2)' }}>
+              <Megaphone size={17} style={{ color: '#F24822' }} />
+            </div>
+            <div>
+              <h2 className="font-semibold text-white text-sm">Equity Overview</h2>
+              <p className="text-xs text-gray-500">Partnership & cap table</p>
+            </div>
+          </div>
+
+          {!hasEquity && agreements.length === 0 ? (
+            <div className="py-6 text-center text-gray-600">
+              <Megaphone size={28} className="mx-auto mb-2 opacity-20" />
+              <p className="text-sm">Equity details will appear once your cap table is set up.</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {profile?.equity_percentage != null && (
+                <div className="p-4 rounded-xl" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
+                  <p className="text-xs text-gray-500 mb-1">BrandPushers equity stake</p>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-3xl font-bold text-white">{profile.equity_percentage}%</span>
+                  </div>
+                </div>
+              )}
+              {stakes.length > 0 && (
+                <div>
+                  <div className="w-full h-4 rounded-full overflow-hidden flex" style={{ background: 'rgba(255,255,255,0.04)' }}>
+                    {stakes.map((s, i) => (
+                      <div key={s.id} style={{ width: `${s.equity_percentage}%`, background: COLORS[i % COLORS.length], minWidth: s.equity_percentage > 0 ? 2 : 0 }} title={`${s.stakeholder_name}: ${s.equity_percentage}%`} />
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {stakes.map((s, i) => (
+                      <div key={s.id} className="flex items-center gap-1.5">
+                        <div className="w-2 h-2 rounded-full" style={{ background: COLORS[i % COLORS.length] }} />
+                        <span className="text-[11px] text-gray-400">{s.stakeholder_name} <span className="font-semibold" style={{ color: COLORS[i % COLORS.length] }}>{s.equity_percentage}%</span></span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {pendingAgreement && (
+                <div className="flex items-center gap-3 p-3 rounded-xl" style={{ background: 'rgba(242,72,34,0.08)', border: '1px solid rgba(242,72,34,0.2)' }}>
+                  <Bell size={14} style={{ color: '#F24822' }} className="shrink-0" />
+                  <p className="text-xs text-white">Agreement pending signature</p>
+                </div>
+              )}
+              {signedAgreements.length > 0 && (
+                <div className="flex items-center gap-2 text-green-400 text-xs">
+                  <CheckCircle size={12} /> {signedAgreements.length} agreement{signedAgreements.length !== 1 ? 's' : ''} signed
+                </div>
+              )}
+            </div>
+          )}
+        </Card>
+      </motion.div>
+
+      {/* News card in left column */}
+      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
+        <Card>
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.2)' }}>
+              <Newspaper size={17} style={{ color: '#60a5fa' }} />
+            </div>
+            <div>
+              <h2 className="font-semibold text-white text-sm">News & Updates</h2>
+              <p className="text-xs text-gray-500">Latest from BrandPushers</p>
+            </div>
+          </div>
+          <div className="py-4 text-center text-gray-600">
+            <p className="text-sm">No updates yet.</p>
+          </div>
+        </Card>
+      </motion.div>
+
+      </div>{/* end left column */}
+
+      {/* ── RIGHT COLUMN: Program Progress ─────────── */}
+      <div>
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
         <Card>
           <div className="flex items-center gap-3 mb-5">
@@ -423,131 +511,9 @@ export default function DashboardPage() {
           )}
         </Card>
       </motion.div>
+      </div>{/* end right column */}
 
-      {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-          CARD 3 — Equity Overview
-          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
-      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
-        <Card>
-          <div className="flex items-center gap-3 mb-5">
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'rgba(242,72,34,0.1)', border: '1px solid rgba(242,72,34,0.2)' }}>
-              <Megaphone size={17} style={{ color: '#F24822' }} />
-            </div>
-            <div>
-              <h2 className="font-semibold text-white text-sm">Equity Overview</h2>
-              <p className="text-xs text-gray-500">Partnership & cap table</p>
-            </div>
-          </div>
-
-          {!hasEquity && agreements.length === 0 ? (
-            <div className="py-8 text-center text-gray-600">
-              <Megaphone size={28} className="mx-auto mb-2 opacity-20" />
-              <p className="text-sm">Equity details will appear once your cap table is set up.</p>
-              <p className="text-xs mt-1 text-gray-700">Your advisor will configure this and notify you.</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {/* Partnership info */}
-              {profile?.equity_percentage != null && (
-                <div className="p-4 rounded-xl" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
-                  <p className="text-xs text-gray-500 mb-1">BrandPushers equity stake in {profile.brand_name || 'your company'}</p>
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-3xl font-bold text-white">{profile.equity_percentage}%</span>
-                    <span className="text-sm text-gray-500">held by WHUT.AI LLC</span>
-                  </div>
-                  {profile.fee_amount != null && (
-                    <p className="text-xs text-gray-600 mt-1">Program fee: <span className="text-gray-300">${profile.fee_amount.toLocaleString()}</span></p>
-                  )}
-                  {profile.equity_agreed && (
-                    <div className="flex items-center gap-1.5 mt-2 text-green-400 text-xs">
-                      <CheckCircle size={12} /> Equity terms confirmed
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Cap table bar */}
-              {stakes.length > 0 && (
-                <div>
-                  <p className="text-xs text-gray-500 mb-2">Cap table · {totalStakesPct.toFixed(1)}% allocated</p>
-                  <div className="w-full h-5 rounded-full overflow-hidden flex" style={{ background: 'rgba(255,255,255,0.04)' }}>
-                    {stakes.map((s, i) => (
-                      <div
-                        key={s.id}
-                        style={{ width: `${s.equity_percentage}%`, background: COLORS[i % COLORS.length], minWidth: s.equity_percentage > 0 ? 2 : 0 }}
-                        title={`${s.stakeholder_name}: ${s.equity_percentage}%`}
-                      />
-                    ))}
-                    {totalStakesPct < 99.5 && (
-                      <div style={{ flex: 1, background: 'rgba(255,255,255,0.04)' }} />
-                    )}
-                  </div>
-                  <div className="flex flex-wrap gap-3 mt-2">
-                    {stakes.map((s, i) => (
-                      <div key={s.id} className="flex items-center gap-1.5">
-                        <div className="w-2 h-2 rounded-full" style={{ background: COLORS[i % COLORS.length] }} />
-                        <span className="text-xs text-gray-400">{s.stakeholder_name}</span>
-                        <span className="text-xs font-semibold" style={{ color: COLORS[i % COLORS.length] }}>{s.equity_percentage}%</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Agreement status */}
-              {agreements.length > 0 && (
-                <div className="space-y-2">
-                  {pendingAgreement && (
-                    <div className="flex items-center gap-3 p-3 rounded-xl"
-                      style={{ background: 'rgba(242,72,34,0.08)', border: '1px solid rgba(242,72,34,0.2)' }}
-                    >
-                      <Bell size={14} style={{ color: '#F24822' }} className="shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium text-white">Agreement pending your signature</p>
-                        <p className="text-[10px] text-gray-500">Sent {new Date(pendingAgreement.sent_at).toLocaleDateString()} · Check notifications to sign</p>
-                      </div>
-                    </div>
-                  )}
-                  {signedAgreements.length > 0 && (
-                    <div className="flex items-center gap-3 p-3 rounded-xl"
-                      style={{ background: 'rgba(74,222,128,0.06)', border: '1px solid rgba(74,222,128,0.15)' }}
-                    >
-                      <CheckCircle size={14} className="text-green-400 shrink-0" />
-                      <div>
-                        <p className="text-xs font-medium text-white">{signedAgreements.length} agreement{signedAgreements.length !== 1 ? 's' : ''} signed</p>
-                        <p className="text-[10px] text-gray-500">Available in your Documents</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-        </Card>
-      </motion.div>
-
-      {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-          CARD 4 — News / Updates
-          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
-      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-        <Card>
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.2)' }}>
-              <Newspaper size={17} style={{ color: '#60a5fa' }} />
-            </div>
-            <div>
-              <h2 className="font-semibold text-white text-sm">News & Updates</h2>
-              <p className="text-xs text-gray-500">Latest from BrandPushers</p>
-            </div>
-          </div>
-
-          <div className="py-6 text-center text-gray-600">
-            <Newspaper size={28} className="mx-auto mb-2 opacity-20" />
-            <p className="text-sm">No updates yet.</p>
-            <p className="text-xs mt-1 text-gray-700">Program announcements will appear here.</p>
-          </div>
-        </Card>
-      </motion.div>
+      </div>{/* end grid */}
 
       {/* Step modal */}
       <StepModal step={selectedStep} onClose={() => setSelectedStep(null)} />
