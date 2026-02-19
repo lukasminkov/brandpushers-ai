@@ -10,6 +10,7 @@ interface Phase {
   description: string | null
   banner_url: string | null
   sort_order: number
+  created_at?: string
 }
 
 interface PhaseModalProps {

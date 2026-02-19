@@ -1,11 +1,14 @@
 'use client'
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { motion, AnimatePresence } from 'framer-motion'
-import TiptapEditor from '@/components/admin/TiptapEditor'
+import PhaseModal from '@/components/admin/PhaseModal'
+import StepEditorModal from '@/components/admin/StepEditorModal'
+import AdminModal from '@/components/admin/AdminModal'
 import {
-  Plus, Trash2, ChevronUp, ChevronDown, ChevronRight, X, Save,
-  Upload, Play, Link2, BarChart2, GripVertical, Eye
+  Plus, Trash2, ChevronUp, ChevronDown, Pencil, BarChart2,
+  Layers, BookOpen, Play, Link2, GripVertical, ChevronRight,
+  AlertTriangle,
 } from 'lucide-react'
 
 interface Phase {
@@ -14,7 +17,7 @@ interface Phase {
   description: string | null
   banner_url: string | null
   sort_order: number
-  created_at: string
+  created_at?: string
 }
 
 interface Step {
@@ -23,14 +26,8 @@ interface Step {
   title: string
   content: Record<string, unknown> | null
   video_url: string | null
-  resource_links: ResourceLink[] | null
+  resource_links: Array<{ title: string; url: string; type: string }> | null
   sort_order: number
-}
-
-interface ResourceLink {
-  title: string
-  url: string
-  type: string
 }
 
 interface MemberProgress {
@@ -42,178 +39,123 @@ interface MemberProgress {
 }
 
 export default function PhasesAdminPage() {
-  const [phases, setPhases] = useState<Phase[]>([])
-  const [selectedPhase, setSelectedPhase] = useState<Phase | null>(null)
-  const [steps, setSteps] = useState<Step[]>([])
-  const [selectedStep, setSelectedStep] = useState<Step | null>(null)
-  const [activeTab, setActiveTab] = useState<'phases' | 'progress'>('phases')
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [progress, setProgress] = useState<MemberProgress[]>([])
-  const [uploadingBanner, setUploadingBanner] = useState(false)
-  const bannerRef = useRef<HTMLInputElement>(null)
   const supabase = createClient()
 
-  // Phase form state
-  const [phaseTitle, setPhaseTitle] = useState('')
-  const [phaseDesc, setPhaseDesc] = useState('')
-  const [phaseBanner, setPhaseBanner] = useState<string | null>(null)
+  /* ─ Data ─────────────────────────────────────────── */
+  const [phases,   setPhases]   = useState<Phase[]>([])
+  const [steps,    setSteps]    = useState<Record<string, Step[]>>({})  // keyed by phase_id
+  const [progress, setProgress] = useState<MemberProgress[]>([])
+  const [loading,  setLoading]  = useState(true)
+  const [activeTab, setActiveTab] = useState<'builder' | 'progress'>('builder')
 
-  // Step form state
-  const [stepTitle, setStepTitle] = useState('')
-  const [stepContent, setStepContent] = useState<Record<string, unknown> | null>(null)
-  const [stepVideoUrl, setStepVideoUrl] = useState('')
-  const [stepLinks, setStepLinks] = useState<ResourceLink[]>([])
+  /* ─ Expand state ─────────────────────────────────── */
+  const [expandedPhase, setExpandedPhase] = useState<string | null>(null)
 
+  /* ─ Modal state ──────────────────────────────────── */
+  const [phaseModal,    setPhaseModal]    = useState<{ open: boolean; phase: Phase | null }>({ open: false, phase: null })
+  const [stepModal,     setStepModal]     = useState<{ open: boolean; step: Step | null; phaseId: string }>({ open: false, step: null, phaseId: '' })
+  const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; type: 'phase' | 'step'; id: string; name: string } | null>(null)
+
+  /* ─ Load ─────────────────────────────────────────── */
   const loadPhases = async () => {
     const { data } = await supabase.from('phases').select('*').order('sort_order')
     setPhases((data || []) as Phase[])
     setLoading(false)
   }
 
-  const loadSteps = async (phaseId: string) => {
+  const loadStepsForPhase = async (phaseId: string) => {
     const { data } = await supabase.from('phase_steps').select('*').eq('phase_id', phaseId).order('sort_order')
-    setSteps((data || []) as Step[])
+    setSteps(prev => ({ ...prev, [phaseId]: (data || []) as Step[] }))
   }
 
   const loadProgress = async () => {
-    // Get all phase steps
     const { data: allSteps } = await supabase.from('phase_steps').select('id')
-    const totalSteps = allSteps?.length || 0
-
-    // Get all members + their progress
+    const total = allSteps?.length || 0
     const { data: members } = await supabase.from('profiles').select('id, full_name, email').eq('role', 'member')
     if (!members) { setProgress([]); return }
-
-    const { data: progressData } = await supabase.from('member_step_progress').select('user_id, step_id').eq('completed', true)
-    
-    const progressMap: Record<string, string[]> = {}
-    for (const p of progressData || []) {
-      if (!progressMap[p.user_id]) progressMap[p.user_id] = []
-      progressMap[p.user_id].push(p.step_id)
+    const { data: prog } = await supabase.from('member_step_progress').select('user_id, step_id').eq('completed', true)
+    const map: Record<string, string[]> = {}
+    for (const p of prog || []) {
+      if (!map[p.user_id]) map[p.user_id] = []
+      map[p.user_id].push(p.step_id)
     }
-
     setProgress(members.map(m => ({
-      user_id: m.id,
-      email: m.email || '',
-      full_name: m.full_name,
-      completed_steps: progressMap[m.id] || [],
-      total_steps: totalSteps,
+      user_id: m.id, email: m.email || '', full_name: m.full_name,
+      completed_steps: map[m.id] || [], total_steps: total,
     })))
   }
 
   useEffect(() => { loadPhases() }, [])
   useEffect(() => { if (activeTab === 'progress') loadProgress() }, [activeTab])
 
-  const selectPhase = (p: Phase) => {
-    setSelectedPhase(p)
-    setPhaseTitle(p.title)
-    setPhaseDesc(p.description || '')
-    setPhaseBanner(p.banner_url)
-    setSelectedStep(null)
-    loadSteps(p.id)
+  /* Expand phase and lazy-load its steps */
+  const togglePhase = (id: string) => {
+    if (expandedPhase === id) {
+      setExpandedPhase(null)
+    } else {
+      setExpandedPhase(id)
+      if (!steps[id]) loadStepsForPhase(id)
+    }
   }
 
-  const selectStep = (s: Step) => {
-    setSelectedStep(s)
-    setStepTitle(s.title)
-    setStepContent(s.content)
-    setStepVideoUrl(s.video_url || '')
-    setStepLinks(s.resource_links || [])
-  }
-
-  const addPhase = async () => {
-    const maxOrder = phases.length > 0 ? Math.max(...phases.map(p => p.sort_order)) : -1
-    const { data } = await supabase.from('phases').insert({ title: 'New Phase', sort_order: maxOrder + 1 }).select().single()
-    if (data) { await loadPhases(); selectPhase(data as Phase) }
-  }
-
-  const savePhase = async () => {
-    if (!selectedPhase) return
-    setSaving(true)
-    await supabase.from('phases').update({
-      title: phaseTitle,
-      description: phaseDesc || null,
-      banner_url: phaseBanner,
-    }).eq('id', selectedPhase.id)
-    setSelectedPhase({ ...selectedPhase, title: phaseTitle, description: phaseDesc, banner_url: phaseBanner })
-    await loadPhases()
-    setSaving(false)
-  }
-
-  const deletePhase = async (id: string) => {
-    if (!confirm('Delete this phase and all its steps?')) return
-    await supabase.from('phases').delete().eq('id', id)
-    if (selectedPhase?.id === id) { setSelectedPhase(null); setSteps([]) }
-    await loadPhases()
-  }
-
+  /* ─ Reorder ──────────────────────────────────────── */
   const movePhase = async (phase: Phase, dir: -1 | 1) => {
     const idx = phases.findIndex(p => p.id === phase.id)
     const target = phases[idx + dir]
     if (!target) return
     await supabase.from('phases').update({ sort_order: target.sort_order }).eq('id', phase.id)
     await supabase.from('phases').update({ sort_order: phase.sort_order }).eq('id', target.id)
-    await loadPhases()
-  }
-
-  const uploadBanner = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file || !selectedPhase) return
-    setUploadingBanner(true)
-    const ext = file.name.split('.').pop()
-    const path = `phases/${selectedPhase.id}.${ext}`
-    const { error } = await supabase.storage.from('banners').upload(path, file, { upsert: true })
-    if (!error) {
-      const { data: { publicUrl } } = supabase.storage.from('banners').getPublicUrl(path)
-      setPhaseBanner(publicUrl)
-    }
-    setUploadingBanner(false)
-  }
-
-  const addStep = async () => {
-    if (!selectedPhase) return
-    const maxOrder = steps.length > 0 ? Math.max(...steps.map(s => s.sort_order)) : -1
-    const { data } = await supabase.from('phase_steps').insert({
-      phase_id: selectedPhase.id, title: 'New Step', sort_order: maxOrder + 1
-    }).select().single()
-    if (data) { await loadSteps(selectedPhase.id); selectStep(data as Step) }
-  }
-
-  const saveStep = async () => {
-    if (!selectedStep) return
-    setSaving(true)
-    await supabase.from('phase_steps').update({
-      title: stepTitle,
-      content: stepContent,
-      video_url: stepVideoUrl || null,
-      resource_links: stepLinks.length > 0 ? stepLinks : null,
-    }).eq('id', selectedStep.id)
-    if (selectedPhase) await loadSteps(selectedPhase.id)
-    setSaving(false)
-  }
-
-  const deleteStep = async (id: string) => {
-    if (!confirm('Delete this step?')) return
-    await supabase.from('phase_steps').delete().eq('id', id)
-    if (selectedStep?.id === id) setSelectedStep(null)
-    if (selectedPhase) await loadSteps(selectedPhase.id)
+    loadPhases()
   }
 
   const moveStep = async (step: Step, dir: -1 | 1) => {
-    const idx = steps.findIndex(s => s.id === step.id)
-    const target = steps[idx + dir]
+    const list = steps[step.phase_id] || []
+    const idx = list.findIndex(s => s.id === step.id)
+    const target = list[idx + dir]
     if (!target) return
     await supabase.from('phase_steps').update({ sort_order: target.sort_order }).eq('id', step.id)
     await supabase.from('phase_steps').update({ sort_order: step.sort_order }).eq('id', target.id)
-    if (selectedPhase) await loadSteps(selectedPhase.id)
+    loadStepsForPhase(step.phase_id)
   }
 
-  const addLink = () => setStepLinks(prev => [...prev, { title: '', url: '', type: 'link' }])
-  const updateLink = (i: number, key: keyof ResourceLink, val: string) => {
-    setStepLinks(prev => prev.map((l, idx) => idx === i ? { ...l, [key]: val } : l))
+  /* ─ Delete ───────────────────────────────────────── */
+  const confirmDelete = (type: 'phase' | 'step', id: string, name: string) => {
+    setDeleteConfirm({ open: true, type, id, name })
   }
-  const removeLink = (i: number) => setStepLinks(prev => prev.filter((_, idx) => idx !== i))
+
+  const executeDelete = async () => {
+    if (!deleteConfirm) return
+    if (deleteConfirm.type === 'phase') {
+      await supabase.from('phases').delete().eq('id', deleteConfirm.id)
+      if (expandedPhase === deleteConfirm.id) setExpandedPhase(null)
+      setSteps(prev => { const n = { ...prev }; delete n[deleteConfirm.id]; return n })
+      loadPhases()
+    } else {
+      const step = Object.values(steps).flat().find(s => s.id === deleteConfirm.id)
+      await supabase.from('phase_steps').delete().eq('id', deleteConfirm.id)
+      if (step) loadStepsForPhase(step.phase_id)
+    }
+    setDeleteConfirm(null)
+  }
+
+  /* ─ Phase saved callback ─────────────────────────── */
+  const onPhaseSaved = (saved: Phase) => {
+    setPhases(prev => {
+      const idx = prev.findIndex(p => p.id === saved.id)
+      if (idx >= 0) return prev.map(p => p.id === saved.id ? saved : p)
+      return [...prev, saved].sort((a, b) => a.sort_order - b.sort_order)
+    })
+  }
+
+  /* ─ Step saved callback ──────────────────────────── */
+  const onStepSaved = (saved: Step) => {
+    setSteps(prev => {
+      const list = prev[saved.phase_id] || []
+      const idx = list.findIndex(s => s.id === saved.id)
+      if (idx >= 0) return { ...prev, [saved.phase_id]: list.map(s => s.id === saved.id ? saved : s) }
+      return { ...prev, [saved.phase_id]: [...list, saved] }
+    })
+  }
 
   if (loading) return (
     <div className="flex items-center justify-center h-64">
@@ -221,39 +163,56 @@ export default function PhasesAdminPage() {
     </div>
   )
 
-  return (
-    <div>
-      {/* Header */}
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-3xl font-bold">Phase & Course Builder</h1>
-          <p className="text-gray-500 mt-1">Build the member journey step by step</p>
-        </div>
-        <div className="flex gap-3">
-          <button
-            onClick={() => setActiveTab('phases')}
-            className={`px-4 py-2 rounded-xl text-sm font-medium transition ${activeTab === 'phases' ? 'bg-brand-orange text-white' : 'glass text-gray-400 hover:text-white'}`}
-          >
-            <GripVertical size={14} className="inline mr-1.5" />Phases
-          </button>
-          <button
-            onClick={() => setActiveTab('progress')}
-            className={`px-4 py-2 rounded-xl text-sm font-medium transition ${activeTab === 'progress' ? 'bg-brand-orange text-white' : 'glass text-gray-400 hover:text-white'}`}
-          >
-            <BarChart2 size={14} className="inline mr-1.5" />Progress
-          </button>
-        </div>
-      </div>
+  const totalStepCount = Object.values(steps).reduce((acc, s) => acc + s.length, 0)
 
-      {activeTab === 'progress' ? (
-        /* ── Progress View ── */
-        <div>
-          <h2 className="text-xl font-semibold mb-4">Member Progress</h2>
-          {progress.length === 0 ? (
-            <div className="glass rounded-2xl p-12 text-center text-gray-500">No members yet</div>
-          ) : (
-            <div className="space-y-4">
-              {progress.map(m => {
+  return (
+    <>
+      {/* ── Page ── */}
+      <div>
+        {/* Header */}
+        <div className="flex items-start justify-between mb-8">
+          <div>
+            <h1 className="text-3xl font-bold">Course Builder</h1>
+            <p className="text-gray-500 mt-1">
+              {phases.length} phase{phases.length !== 1 ? 's' : ''} · {totalStepCount} step{totalStepCount !== 1 ? 's' : ''}
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="flex gap-1 p-1 bg-white/5 rounded-xl border border-white/8">
+              <button
+                onClick={() => setActiveTab('builder')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition ${activeTab === 'builder' ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-300'}`}
+              >
+                <Layers size={13} /> Builder
+              </button>
+              <button
+                onClick={() => setActiveTab('progress')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition ${activeTab === 'progress' ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-300'}`}
+              >
+                <BarChart2 size={13} /> Progress
+              </button>
+            </div>
+            {activeTab === 'builder' && (
+              <button
+                onClick={() => setPhaseModal({ open: true, phase: null })}
+                className="flex items-center gap-2 px-4 py-2.5 bg-brand-orange rounded-xl text-sm font-semibold hover:opacity-90 transition"
+              >
+                <Plus size={14} /> New Phase
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* ── Progress Tab ── */}
+        {activeTab === 'progress' && (
+          <div className="space-y-4">
+            {progress.length === 0 ? (
+              <div className="glass rounded-2xl p-12 text-center text-gray-500">
+                <BarChart2 size={36} className="mx-auto mb-3 opacity-30" />
+                No members yet
+              </div>
+            ) : (
+              progress.map(m => {
                 const pct = m.total_steps > 0 ? Math.round((m.completed_steps.length / m.total_steps) * 100) : 0
                 return (
                   <div key={m.user_id} className="glass rounded-2xl p-5">
@@ -262,254 +221,252 @@ export default function PhasesAdminPage() {
                         <p className="font-semibold">{m.full_name || m.email}</p>
                         <p className="text-gray-500 text-sm">{m.email}</p>
                       </div>
-                      <span className="text-brand-orange font-bold">{pct}%</span>
+                      <span className="text-brand-orange font-bold text-lg">{pct}%</span>
                     </div>
-                    <div className="w-full h-2 bg-dark-700 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-logo-gradient rounded-full transition-all duration-500"
-                        style={{ width: `${pct}%` }}
-                      />
+                    <div className="w-full h-2 bg-black/30 rounded-full overflow-hidden">
+                      <div className="h-full bg-logo-gradient rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
                     </div>
                     <p className="text-gray-500 text-xs mt-1.5">{m.completed_steps.length} of {m.total_steps} steps completed</p>
                   </div>
                 )
-              })}
-            </div>
-          )}
-        </div>
-      ) : (
-        /* ── Phases & Steps Builder ── */
-        <div className="flex gap-6 h-[calc(100vh-200px)]">
-          {/* Phase List */}
-          <div className="w-72 flex-shrink-0 flex flex-col">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="font-semibold text-gray-300">Phases</h2>
-              <button onClick={addPhase} className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-brand-orange rounded-lg hover:opacity-90 transition">
-                <Plus size={12} /> Add
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto space-y-2 pr-1">
-              {phases.map((p, i) => (
-                <div
-                  key={p.id}
-                  onClick={() => selectPhase(p)}
-                  className={`group glass rounded-xl p-3 cursor-pointer transition border ${selectedPhase?.id === p.id ? 'border-brand-orange/50 bg-brand-orange/5' : 'border-transparent hover:border-white/20'}`}
-                >
-                  <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-full bg-brand-orange/20 flex items-center justify-center text-brand-orange text-xs font-bold flex-shrink-0">
-                      {i + 1}
-                    </div>
-                    <span className="flex-1 text-sm font-medium truncate">{p.title}</span>
-                    <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition">
-                      <button onClick={e => { e.stopPropagation(); movePhase(p, -1) }} className="p-1 hover:text-white text-gray-500 disabled:opacity-20" disabled={i === 0}>
-                        <ChevronUp size={12} />
-                      </button>
-                      <button onClick={e => { e.stopPropagation(); movePhase(p, 1) }} className="p-1 hover:text-white text-gray-500" disabled={i === phases.length - 1}>
-                        <ChevronDown size={12} />
-                      </button>
-                      <button onClick={e => { e.stopPropagation(); deletePhase(p.id) }} className="p-1 text-red-400 hover:text-red-300">
-                        <Trash2 size={12} />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-              {phases.length === 0 && (
-                <div className="text-center text-gray-600 py-8 text-sm">No phases yet</div>
-              )}
-            </div>
+              })
+            )}
           </div>
+        )}
 
-          {/* Phase Editor */}
-          {selectedPhase ? (
-            <div className="flex-1 flex gap-5 min-w-0">
-              {/* Phase Details + Steps */}
-              <div className="w-64 flex-shrink-0 flex flex-col gap-4">
-                {/* Phase Details */}
-                <div className="glass rounded-2xl p-4">
-                  <h3 className="font-semibold text-sm text-gray-300 mb-3">Phase Details</h3>
-                  <div className="space-y-3">
-                    <input
-                      value={phaseTitle}
-                      onChange={e => setPhaseTitle(e.target.value)}
-                      className="w-full bg-dark-700 border border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange"
-                      placeholder="Phase title"
-                    />
-                    <textarea
-                      value={phaseDesc}
-                      onChange={e => setPhaseDesc(e.target.value)}
-                      className="w-full bg-dark-700 border border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand-orange resize-none h-20"
-                      placeholder="Description (optional)"
-                    />
-                    {/* Banner Upload */}
-                    <div>
-                      {phaseBanner && (
-                        <div className="mb-2 rounded-lg overflow-hidden h-20 bg-dark-700">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={phaseBanner} alt="Banner" className="w-full h-full object-cover" />
-                        </div>
-                      )}
-                      <input type="file" ref={bannerRef} accept="image/*" className="hidden" onChange={uploadBanner} />
-                      <button
-                        onClick={() => bannerRef.current?.click()}
-                        className="w-full flex items-center justify-center gap-2 py-2 text-xs glass rounded-lg hover:bg-white/10 transition"
-                        disabled={uploadingBanner}
-                      >
-                        <Upload size={12} />
-                        {uploadingBanner ? 'Uploading…' : phaseBanner ? 'Change Banner' : 'Upload Banner'}
-                      </button>
-                    </div>
-                    <button
-                      onClick={savePhase}
-                      disabled={saving}
-                      className="w-full flex items-center justify-center gap-2 py-2 bg-brand-orange rounded-lg text-sm font-semibold hover:opacity-90 transition"
-                    >
-                      <Save size={12} /> {saving ? 'Saving…' : 'Save Phase'}
-                    </button>
-                  </div>
+        {/* ── Builder Tab ── */}
+        {activeTab === 'builder' && (
+          <div className="space-y-3">
+            {phases.length === 0 && (
+              <div className="glass rounded-2xl p-16 text-center">
+                <div className="w-16 h-16 rounded-2xl bg-brand-orange/10 flex items-center justify-center mx-auto mb-4">
+                  <BookOpen size={28} className="text-brand-orange/60" />
                 </div>
-
-                {/* Steps List */}
-                <div className="glass rounded-2xl p-4 flex-1 overflow-hidden flex flex-col">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="font-semibold text-sm text-gray-300">Steps</h3>
-                    <button onClick={addStep} className="flex items-center gap-1 text-xs px-2 py-1 bg-brand-orange/20 text-brand-orange rounded-lg hover:bg-brand-orange/30 transition">
-                      <Plus size={10} /> Add
-                    </button>
-                  </div>
-                  <div className="flex-1 overflow-y-auto space-y-1.5">
-                    {steps.map((s, i) => (
-                      <div
-                        key={s.id}
-                        onClick={() => selectStep(s)}
-                        className={`group flex items-center gap-2 p-2 rounded-lg cursor-pointer transition border ${selectedStep?.id === s.id ? 'border-brand-orange/50 bg-brand-orange/5' : 'border-transparent hover:bg-white/5'}`}
-                      >
-                        <span className="text-xs text-gray-500 w-4 text-center">{i + 1}</span>
-                        <span className="flex-1 text-xs truncate">{s.title}</span>
-                        <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition">
-                          <button onClick={e => { e.stopPropagation(); moveStep(s, -1) }} className="p-0.5 hover:text-white text-gray-500" disabled={i === 0}>
-                            <ChevronUp size={10} />
-                          </button>
-                          <button onClick={e => { e.stopPropagation(); moveStep(s, 1) }} className="p-0.5 hover:text-white text-gray-500" disabled={i === steps.length - 1}>
-                            <ChevronDown size={10} />
-                          </button>
-                          <button onClick={e => { e.stopPropagation(); deleteStep(s.id) }} className="p-0.5 text-red-400 hover:text-red-300">
-                            <Trash2 size={10} />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                    {steps.length === 0 && (
-                      <p className="text-xs text-gray-600 text-center py-4">No steps yet</p>
-                    )}
-                  </div>
-                </div>
+                <p className="text-lg font-semibold text-white mb-1">No phases yet</p>
+                <p className="text-gray-500 text-sm mb-6">Create your first phase to start building the member journey.</p>
+                <button
+                  onClick={() => setPhaseModal({ open: true, phase: null })}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-brand-orange rounded-xl text-sm font-semibold hover:opacity-90 transition"
+                >
+                  <Plus size={14} /> Create First Phase
+                </button>
               </div>
+            )}
 
-              {/* Step Editor */}
-              {selectedStep ? (
-                <div className="flex-1 overflow-y-auto">
-                  <div className="glass rounded-2xl p-5 space-y-4">
-                    <div className="flex items-center justify-between">
-                      <h3 className="font-semibold">Edit Step</h3>
+            {phases.map((phase, phaseIdx) => {
+              const phaseSteps = steps[phase.id] || []
+              const isOpen = expandedPhase === phase.id
+              const stepCount = phaseSteps.length
+
+              return (
+                <motion.div
+                  key={phase.id}
+                  layout
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: phaseIdx * 0.04 }}
+                  className={`rounded-2xl border transition-colors overflow-hidden ${isOpen ? 'border-brand-orange/30 bg-[#111]' : 'border-white/8 bg-[#111] hover:border-white/15'}`}
+                >
+                  {/* Phase Banner (when expanded + has banner) */}
+                  {isOpen && phase.banner_url && (
+                    <div className="h-28 overflow-hidden relative">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={phase.banner_url} alt="" className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-gradient-to-b from-transparent to-[#111]" />
+                    </div>
+                  )}
+
+                  {/* Phase Row */}
+                  <div className="flex items-center gap-3 px-5 py-4">
+                    {/* Drag handle + index */}
+                    <div className="flex items-center gap-2 flex-shrink-0 text-gray-600">
+                      <GripVertical size={14} />
+                      <span className="text-xs font-mono w-4 text-center">{phaseIdx + 1}</span>
+                    </div>
+
+                    {/* Expand toggle */}
+                    <button onClick={() => togglePhase(phase.id)} className="flex-1 flex items-center gap-3 text-left min-w-0">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-white truncate">{phase.title}</p>
+                        {phase.description && (
+                          <p className="text-gray-500 text-xs mt-0.5 truncate">{phase.description}</p>
+                        )}
+                      </div>
+                      <span className="text-xs text-gray-600 flex-shrink-0">{stepCount} step{stepCount !== 1 ? 's' : ''}</span>
+                      <ChevronRight size={16} className={`text-gray-500 flex-shrink-0 transition-transform ${isOpen ? 'rotate-90' : ''}`} />
+                    </button>
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-1 flex-shrink-0 ml-2">
                       <button
-                        onClick={saveStep}
-                        disabled={saving}
-                        className="flex items-center gap-2 px-4 py-2 bg-brand-orange rounded-xl text-sm font-semibold hover:opacity-90 transition"
+                        onClick={() => movePhase(phase, -1)}
+                        disabled={phaseIdx === 0}
+                        className="p-1.5 rounded-lg text-gray-600 hover:text-white hover:bg-white/8 transition disabled:opacity-20 disabled:cursor-not-allowed"
                       >
-                        <Save size={14} /> {saving ? 'Saving…' : 'Save Step'}
+                        <ChevronUp size={14} />
+                      </button>
+                      <button
+                        onClick={() => movePhase(phase, 1)}
+                        disabled={phaseIdx === phases.length - 1}
+                        className="p-1.5 rounded-lg text-gray-600 hover:text-white hover:bg-white/8 transition disabled:opacity-20 disabled:cursor-not-allowed"
+                      >
+                        <ChevronDown size={14} />
+                      </button>
+                      <button
+                        onClick={() => setPhaseModal({ open: true, phase })}
+                        className="p-1.5 rounded-lg text-gray-600 hover:text-white hover:bg-white/8 transition"
+                      >
+                        <Pencil size={14} />
+                      </button>
+                      <button
+                        onClick={() => confirmDelete('phase', phase.id, phase.title)}
+                        className="p-1.5 rounded-lg text-gray-600 hover:text-red-400 hover:bg-red-500/10 transition"
+                      >
+                        <Trash2 size={14} />
                       </button>
                     </div>
+                  </div>
 
-                    <input
-                      value={stepTitle}
-                      onChange={e => setStepTitle(e.target.value)}
-                      className="w-full bg-dark-700 border border-white/10 rounded-xl px-4 py-2.5 focus:outline-none focus:border-brand-orange"
-                      placeholder="Step title"
-                    />
-
-                    {/* Rich Text Editor */}
-                    <div>
-                      <label className="block text-xs text-gray-400 mb-2">Content (rich text)</label>
-                      <TiptapEditor
-                        key={selectedStep.id}
-                        content={stepContent}
-                        onChange={setStepContent}
-                      />
-                    </div>
-
-                    {/* Video URL */}
-                    <div>
-                      <label className="block text-xs text-gray-400 mb-2 flex items-center gap-1.5"><Play size={12} />Video URL (YouTube)</label>
-                      <input
-                        value={stepVideoUrl}
-                        onChange={e => setStepVideoUrl(e.target.value)}
-                        className="w-full bg-dark-700 border border-white/10 rounded-xl px-4 py-2.5 focus:outline-none focus:border-brand-orange text-sm"
-                        placeholder="https://youtube.com/watch?v=..."
-                      />
-                    </div>
-
-                    {/* Resource Links */}
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <label className="text-xs text-gray-400 flex items-center gap-1.5"><Link2 size={12} />Resource Links</label>
-                        <button onClick={addLink} className="text-xs text-brand-orange hover:underline">+ Add Link</button>
-                      </div>
-                      <div className="space-y-2">
-                        {stepLinks.map((link, i) => (
-                          <div key={i} className="flex gap-2 items-center">
-                            <input
-                              value={link.title}
-                              onChange={e => updateLink(i, 'title', e.target.value)}
-                              className="flex-1 bg-dark-700 border border-white/10 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-brand-orange"
-                              placeholder="Link title"
-                            />
-                            <input
-                              value={link.url}
-                              onChange={e => updateLink(i, 'url', e.target.value)}
-                              className="flex-1 bg-dark-700 border border-white/10 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-brand-orange"
-                              placeholder="https://..."
-                            />
-                            <select
-                              value={link.type}
-                              onChange={e => updateLink(i, 'type', e.target.value)}
-                              className="bg-dark-700 border border-white/10 rounded-lg px-2 py-2 text-xs focus:outline-none focus:border-brand-orange"
+                  {/* Steps (expanded) */}
+                  <AnimatePresence>
+                    {isOpen && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="overflow-hidden"
+                      >
+                        <div className="border-t border-white/6 pb-3">
+                          {phaseSteps.map((step, stepIdx) => (
+                            <div
+                              key={step.id}
+                              className="group flex items-center gap-3 px-5 py-3 hover:bg-white/4 transition"
                             >
-                              <option value="link">Link</option>
-                              <option value="pdf">PDF</option>
-                              <option value="video">Video</option>
-                              <option value="doc">Doc</option>
-                              <option value="template">Template</option>
-                            </select>
-                            <button onClick={() => removeLink(i)} className="text-red-400 hover:text-red-300 p-1">
-                              <X size={14} />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex-1 flex items-center justify-center">
-                  <div className="text-center text-gray-600">
-                    <ChevronRight size={32} className="mx-auto mb-2 opacity-30" />
-                    <p>Select a step to edit it</p>
-                  </div>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="flex-1 flex items-center justify-center">
-              <div className="text-center text-gray-600">
-                <Eye size={48} className="mx-auto mb-3 opacity-20" />
-                <p className="text-lg font-medium">Select a phase to edit</p>
-                <p className="text-sm mt-1">Or create a new one →</p>
-              </div>
-            </div>
-          )}
+                              {/* Step index */}
+                              <span className="text-xs font-mono text-gray-600 w-5 text-center flex-shrink-0">
+                                {stepIdx + 1}
+                              </span>
+
+                              {/* Info */}
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm text-white/90 truncate">{step.title}</p>
+                                <div className="flex items-center gap-3 mt-0.5">
+                                  {step.content && (
+                                    <span className="text-xs text-gray-600 flex items-center gap-1">
+                                      <BookOpen size={9} /> Content
+                                    </span>
+                                  )}
+                                  {step.video_url && (
+                                    <span className="text-xs text-gray-600 flex items-center gap-1">
+                                      <Play size={9} /> Video
+                                    </span>
+                                  )}
+                                  {step.resource_links && step.resource_links.length > 0 && (
+                                    <span className="text-xs text-gray-600 flex items-center gap-1">
+                                      <Link2 size={9} /> {step.resource_links.length} resource{step.resource_links.length !== 1 ? 's' : ''}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Step actions */}
+                              <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition flex-shrink-0">
+                                <button onClick={() => moveStep(step, -1)} disabled={stepIdx === 0} className="p-1.5 rounded-lg text-gray-600 hover:text-white hover:bg-white/8 transition disabled:opacity-20">
+                                  <ChevronUp size={12} />
+                                </button>
+                                <button onClick={() => moveStep(step, 1)} disabled={stepIdx === phaseSteps.length - 1} className="p-1.5 rounded-lg text-gray-600 hover:text-white hover:bg-white/8 transition disabled:opacity-20">
+                                  <ChevronDown size={12} />
+                                </button>
+                                <button
+                                  onClick={() => setStepModal({ open: true, step, phaseId: phase.id })}
+                                  className="p-1.5 rounded-lg text-gray-600 hover:text-white hover:bg-white/8 transition"
+                                >
+                                  <Pencil size={12} />
+                                </button>
+                                <button
+                                  onClick={() => confirmDelete('step', step.id, step.title)}
+                                  className="p-1.5 rounded-lg text-gray-600 hover:text-red-400 hover:bg-red-500/10 transition"
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+
+                          {/* Add step row */}
+                          <button
+                            onClick={() => setStepModal({ open: true, step: null, phaseId: phase.id })}
+                            className="w-full flex items-center gap-2 px-5 py-3 text-sm text-gray-600 hover:text-brand-orange hover:bg-brand-orange/5 transition border-t border-dashed border-white/6"
+                          >
+                            <Plus size={13} />
+                            Add step to &ldquo;{phase.title}&rdquo;
+                          </button>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </motion.div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ── Modals ── */}
+
+      {/* Phase create/edit modal */}
+      <PhaseModal
+        open={phaseModal.open}
+        onClose={() => setPhaseModal({ open: false, phase: null })}
+        phase={phaseModal.phase}
+        nextSortOrder={phases.length}
+        onSaved={onPhaseSaved}
+      />
+
+      {/* Step create/edit modal */}
+      <StepEditorModal
+        open={stepModal.open}
+        onClose={() => setStepModal({ open: false, step: null, phaseId: '' })}
+        step={stepModal.step}
+        phaseId={stepModal.phaseId}
+        nextSortOrder={(steps[stepModal.phaseId] || []).length}
+        onSaved={onStepSaved}
+      />
+
+      {/* Delete confirm modal */}
+      <AdminModal
+        open={!!deleteConfirm?.open}
+        onClose={() => setDeleteConfirm(null)}
+        title={`Delete ${deleteConfirm?.type === 'phase' ? 'Phase' : 'Step'}?`}
+        size="sm"
+        footer={
+          <div className="flex gap-3 justify-end">
+            <button onClick={() => setDeleteConfirm(null)} className="px-4 py-2 rounded-xl text-sm text-gray-400 hover:text-white hover:bg-white/8 transition">
+              Cancel
+            </button>
+            <button onClick={executeDelete} className="px-4 py-2 rounded-xl text-sm font-semibold bg-red-500 text-white hover:bg-red-600 transition">
+              Delete
+            </button>
+          </div>
+        }
+      >
+        <div className="flex gap-4 items-start">
+          <div className="w-10 h-10 rounded-xl bg-red-500/15 flex items-center justify-center flex-shrink-0">
+            <AlertTriangle size={18} className="text-red-400" />
+          </div>
+          <div>
+            <p className="text-sm text-gray-300">
+              Are you sure you want to delete{' '}
+              <span className="text-white font-semibold">&ldquo;{deleteConfirm?.name}&rdquo;</span>?
+            </p>
+            {deleteConfirm?.type === 'phase' && (
+              <p className="text-xs text-gray-500 mt-2">This will permanently delete all steps inside this phase and member progress data.</p>
+            )}
+            <p className="text-xs text-gray-600 mt-1">This action cannot be undone.</p>
+          </div>
         </div>
-      )}
-    </div>
+      </AdminModal>
+    </>
   )
 }
