@@ -54,8 +54,12 @@ interface EquityStake {
 function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
     <div
-      className={`rounded-2xl p-6 ${className}`}
-      style={{ background: 'rgba(255,255,255,0.05)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255,255,255,0.1)' }}
+      className={`rounded-2xl p-6 transition-all duration-300 ${className}`}
+      style={{
+        background: 'rgba(255,255,255,0.04)',
+        backdropFilter: 'blur(12px)',
+        border: '1px solid rgba(255,255,255,0.08)',
+      }}
     >
       {children}
     </div>
@@ -166,7 +170,7 @@ export default function DashboardPage() {
 
   if (loading) return (
     <div className="flex items-center justify-center h-64">
-      <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#F24822', borderTopColor: 'transparent' }} />
+      <div className="spinner" />
     </div>
   )
 
@@ -186,7 +190,7 @@ export default function DashboardPage() {
       {/* ── Header ──────────────────────────────────── */}
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
         <h1 className="text-3xl font-bold text-white mb-1">
-          Welcome back, <span style={{ background: 'linear-gradient(135deg, #9B0EE5, #F57B18)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>{firstName}</span>! 👋
+          Welcome back, <span style={{ background: 'linear-gradient(135deg, #9B0EE5, #F57B18)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>{firstName}</span>
         </h1>
         <p className="text-gray-500 text-sm">Here&apos;s your BrandPushers partner dashboard.</p>
       </motion.div>
@@ -214,7 +218,7 @@ export default function DashboardPage() {
             </div>
             <button
               onClick={() => setCompanyModalOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition hover:opacity-90"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all duration-200 hover:opacity-90 cursor-pointer active:scale-95"
               style={{ background: 'rgba(242,72,34,0.1)', border: '1px solid rgba(242,72,34,0.2)', color: '#F24822' }}
             >
               <Pencil size={11} /> Edit
@@ -436,7 +440,7 @@ export default function DashboardPage() {
                     {/* Phase header */}
                     <button
                       onClick={() => togglePhase(phase.id)}
-                      className="w-full px-4 py-3.5 flex items-center gap-3 hover:bg-white/[0.03] transition text-left"
+                      className="w-full px-4 py-3.5 flex items-center gap-3 hover:bg-white/[0.03] transition-all duration-200 text-left cursor-pointer"
                     >
                       <div
                         className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-xs font-bold"
@@ -490,7 +494,7 @@ export default function DashboardPage() {
                                   <button
                                     onClick={() => toggleStep(step)}
                                     disabled={togglingStep === step.id}
-                                    className={`shrink-0 transition-transform ${togglingStep === step.id ? 'opacity-50' : 'hover:scale-110 active:scale-95'}`}
+                                    className={`shrink-0 transition-transform cursor-pointer ${togglingStep === step.id ? 'opacity-50' : 'hover:scale-110 active:scale-95'}`}
                                   >
                                     {done
                                       ? <CheckCircle size={18} className="text-green-400" />
@@ -506,7 +510,7 @@ export default function DashboardPage() {
                                   {hasContent && (
                                     <button
                                       onClick={() => setSelectedStep(step)}
-                                      className="shrink-0 text-xs px-2.5 py-1 rounded-lg transition text-gray-500 hover:text-white hover:bg-white/10 flex items-center gap-1 opacity-0 group-hover:opacity-100"
+                                      className="shrink-0 text-xs px-2.5 py-1 rounded-lg transition-all duration-200 text-gray-500 hover:text-white hover:bg-white/10 flex items-center gap-1 opacity-0 group-hover:opacity-100 cursor-pointer"
                                     >
                                       <ChevronRight size={11} /> View
                                     </button>

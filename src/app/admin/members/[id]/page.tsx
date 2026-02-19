@@ -83,7 +83,7 @@ export default function MemberDetailPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#F24822 transparent transparent transparent' }} />
+        <div className="spinner" />
       </div>
     )
   }
@@ -264,7 +264,7 @@ export default function MemberDetailPage() {
         <div className="space-y-6">
           {docsLoading ? (
             <div className="flex justify-center py-12">
-              <div className="w-7 h-7 border-2 border-[#F24822] border-t-transparent rounded-full animate-spin"/>
+              <div className="spinner-sm" />
             </div>
           ) : (
             <>

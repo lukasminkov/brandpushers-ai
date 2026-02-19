@@ -112,7 +112,7 @@ export default function MembersPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#F24822 transparent transparent transparent' }} />
+        <div className="spinner" />
       </div>
     )
   }
@@ -122,7 +122,7 @@ export default function MembersPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-3xl font-bold">Members</h1>
+          <h1 className="text-2xl font-bold text-white">Members</h1>
           <p className="text-gray-500 text-sm mt-1">
             {members.length} member{members.length !== 1 ? 's' : ''} · <span className="text-green-400">{onboardedCount} onboarded</span>
           </p>
@@ -223,7 +223,7 @@ export default function MembersPage() {
                 {/* Manage button */}
                 <button
                   onClick={() => router.push(`/admin/members/${m.id}`)}
-                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-gray-400 hover:text-white bg-white/[0.04] border border-white/[0.06] hover:bg-white/[0.08] transition opacity-0 group-hover:opacity-100"
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-gray-400 hover:text-white bg-white/[0.04] border border-white/[0.06] hover:bg-white/[0.08] transition-all duration-200 opacity-0 group-hover:opacity-100 cursor-pointer"
                 >
                   Manage <ChevronRight size={12} />
                 </button>

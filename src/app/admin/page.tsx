@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { CheckCircle, XCircle, Clock } from 'lucide-react'
+import { CheckCircle, XCircle, Clock, Inbox } from 'lucide-react'
 
 interface Application {
   id: string
@@ -39,39 +39,88 @@ export default function AdminPage() {
     load()
   }
 
-  if (loading) return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-brand-orange border-t-transparent rounded-full animate-spin" /></div>
+  if (loading) return (
+    <div className="flex items-center justify-center h-64">
+      <div className="spinner" />
+    </div>
+  )
 
   return (
     <div>
-      <h1 className="text-3xl font-bold mb-8">Applications</h1>
+      <div className="mb-8">
+        <h1 className="text-2xl font-bold text-white">Applications</h1>
+        <p className="text-sm text-gray-500 mt-1">Review and manage incoming applications</p>
+      </div>
+
       {apps.length === 0 ? (
-        <div className="glass rounded-2xl p-12 text-center text-gray-500">No applications yet</div>
+        <div className="rounded-2xl p-12 text-center" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+          <Inbox size={32} className="mx-auto mb-3 text-gray-600" />
+          <p className="text-gray-500">No applications yet</p>
+        </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-3">
           {apps.map(app => (
-            <div key={app.id} className="glass rounded-2xl p-6">
-              <div className="flex items-start justify-between">
-                <div>
+            <div
+              key={app.id}
+              className="rounded-2xl p-5 transition-all duration-200"
+              style={{
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(255,255,255,0.08)',
+              }}
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-3 mb-2">
-                    <h3 className="text-lg font-bold">{app.name}</h3>
-                    <span className={`text-xs px-2 py-1 rounded-full ${app.status === 'approved' ? 'bg-green-500/20 text-green-400' : app.status === 'rejected' ? 'bg-red-500/20 text-red-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
+                    <h3 className="text-base font-semibold text-white">{app.name}</h3>
+                    <span className={`text-xs px-2.5 py-1 rounded-full font-medium border ${
+                      app.status === 'approved'
+                        ? 'bg-green-500/15 text-green-400 border-green-500/25'
+                        : app.status === 'rejected'
+                        ? 'bg-red-500/15 text-red-400 border-red-500/25'
+                        : 'bg-yellow-500/15 text-yellow-400 border-yellow-500/25'
+                    }`}>
                       {app.status}
                     </span>
                   </div>
-                  <p className="text-gray-400 text-sm">Stage: {app.brand_stage} • Applied: {new Date(app.created_at).toLocaleDateString()}</p>
-                  <p className="text-gray-500 text-sm mt-1">{app.email || app.profiles?.email || 'No email'}{app.profiles?.full_name ? ` • ${app.profiles.full_name}` : ''}</p>
-                  {app.answers?.brandName && <p className="text-gray-400 mt-3 text-sm">Brand: {app.answers.brandName}</p>}
+                  <p className="text-gray-400 text-sm">
+                    Stage: <span className="text-gray-300">{app.brand_stage}</span> · Applied: {new Date(app.created_at).toLocaleDateString()}
+                  </p>
+                  <p className="text-gray-500 text-sm mt-1">
+                    {app.email || app.profiles?.email || 'No email'}
+                    {app.profiles?.full_name ? ` · ${app.profiles.full_name}` : ''}
+                  </p>
+                  {app.answers?.brandName && <p className="text-gray-400 mt-3 text-sm">Brand: <span className="text-gray-300">{app.answers.brandName}</span></p>}
                   {app.answers?.category && <p className="text-gray-500 mt-1 text-sm">Category: {app.answers.category}</p>}
-                  {app.answers?.about && <p className="text-gray-500 mt-1 text-sm">About: {app.answers.about}</p>}
+                  {app.answers?.about && <p className="text-gray-500 mt-1 text-sm line-clamp-2">About: {app.answers.about}</p>}
                 </div>
-                {app.status === 'pending' && (
+                {app.status === 'pending' ? (
                   <div className="flex gap-2 shrink-0">
-                    <button onClick={() => updateStatus(app, 'approved')} className="p-2 bg-green-500/20 text-green-400 rounded-lg hover:bg-green-500/30 transition"><CheckCircle size={20} /></button>
-                    <button onClick={() => updateStatus(app, 'rejected')} className="p-2 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition"><XCircle size={20} /></button>
+                    <button
+                      onClick={() => updateStatus(app, 'approved')}
+                      className="p-2.5 rounded-xl transition-all duration-200 cursor-pointer hover:scale-105 active:scale-95"
+                      style={{ background: 'rgba(74,222,128,0.1)', border: '1px solid rgba(74,222,128,0.2)' }}
+                      title="Approve"
+                    >
+                      <CheckCircle size={18} className="text-green-400" />
+                    </button>
+                    <button
+                      onClick={() => updateStatus(app, 'rejected')}
+                      className="p-2.5 rounded-xl transition-all duration-200 cursor-pointer hover:scale-105 active:scale-95"
+                      style={{ background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.2)' }}
+                      title="Reject"
+                    >
+                      <XCircle size={18} className="text-red-400" />
+                    </button>
                   </div>
-                )}
-                {app.status !== 'pending' && (
-                  <button onClick={() => updateStatus(app, 'pending')} className="p-2 bg-yellow-500/20 text-yellow-400 rounded-lg hover:bg-yellow-500/30 transition"><Clock size={20} /></button>
+                ) : (
+                  <button
+                    onClick={() => updateStatus(app, 'pending')}
+                    className="p-2.5 rounded-xl transition-all duration-200 cursor-pointer hover:scale-105 active:scale-95"
+                    style={{ background: 'rgba(250,204,21,0.1)', border: '1px solid rgba(250,204,21,0.2)' }}
+                    title="Reset to pending"
+                  >
+                    <Clock size={18} className="text-yellow-400" />
+                  </button>
                 )}
               </div>
             </div>
