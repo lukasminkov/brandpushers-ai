@@ -353,14 +353,22 @@ export default function EquityPage() {
     URL.revokeObjectURL(url)
   }
 
+  const cancelAgreement = async (agreementId: string) => {
+    if (!window.confirm('Cancel this pending agreement? This cannot be undone.')) return
+    await supabase.from('equity_agreements').update({ status: 'cancelled' }).eq('id', agreementId)
+    if (selected) loadMemberData(selected.id)
+  }
+
   const statusBadge = (s: string) => {
     const cls: Record<string, string> = {
       signed: 'text-green-400 bg-green-500/15', pending: 'text-yellow-400 bg-yellow-500/15',
       revoked: 'text-red-400 bg-red-500/15',    expired: 'text-gray-400 bg-gray-500/15',
+      cancelled: 'text-red-400 bg-red-500/15',
     }
     const icon: Record<string, React.ReactNode> = {
       signed: <CheckCircle size={11}/>, pending: <Clock size={11}/>,
       revoked: <AlertCircle size={11}/>, expired: <AlertCircle size={11}/>,
+      cancelled: <X size={11}/>,
     }
     return (
       <span className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full font-medium ${cls[s] || ''}`}>
@@ -616,6 +624,14 @@ export default function EquityPage() {
                                 <Download size={12}/> Download
                               </button>
                             </>
+                          )}
+                          {a.status === 'pending' && (
+                            <button
+                              onClick={() => cancelAgreement(a.id)}
+                              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-red-400 hover:text-red-300 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 transition"
+                            >
+                              <X size={12}/> Cancel
+                            </button>
                           )}
                         </div>
                       </div>

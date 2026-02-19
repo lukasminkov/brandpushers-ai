@@ -359,31 +359,38 @@ export default function DocumentsPage() {
             <div className="space-y-2">
               {agreements.map((agr, idx) => {
                 const isSigned = agr.status === 'signed'
+                const isCancelled = agr.status === 'cancelled'
+                const isPending = agr.status === 'pending'
+                const statusColors = isSigned
+                  ? { bg: 'rgba(74,222,128,0.04)', border: 'rgba(74,222,128,0.15)', iconBg: 'rgba(74,222,128,0.1)', iconBorder: 'rgba(74,222,128,0.2)' }
+                  : isCancelled
+                  ? { bg: 'rgba(107,114,128,0.04)', border: 'rgba(107,114,128,0.15)', iconBg: 'rgba(107,114,128,0.1)', iconBorder: 'rgba(107,114,128,0.2)' }
+                  : { bg: 'rgba(245,158,11,0.04)', border: 'rgba(245,158,11,0.15)', iconBg: 'rgba(245,158,11,0.1)', iconBorder: 'rgba(245,158,11,0.2)' }
                 return (
                   <motion.div
                     key={agr.id}
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: idx * 0.05 }}
-                    className="flex items-center gap-4 p-4 rounded-xl group transition"
+                    className={`flex items-center gap-4 p-4 rounded-xl group transition ${isCancelled ? 'opacity-50' : ''}`}
                     style={{
-                      background: isSigned ? 'rgba(74,222,128,0.04)' : 'rgba(245,158,11,0.04)',
-                      border: `1px solid ${isSigned ? 'rgba(74,222,128,0.15)' : 'rgba(245,158,11,0.15)'}`,
+                      background: statusColors.bg,
+                      border: `1px solid ${statusColors.border}`,
                     }}
                   >
                     <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
                       style={{
-                        background: isSigned ? 'rgba(74,222,128,0.1)' : 'rgba(245,158,11,0.1)',
-                        border: `1px solid ${isSigned ? 'rgba(74,222,128,0.2)' : 'rgba(245,158,11,0.2)'}`,
+                        background: statusColors.iconBg,
+                        border: `1px solid ${statusColors.iconBorder}`,
                       }}
                     >
-                      {isSigned ? <FileCheck size={16} className="text-green-400" /> : <FileText size={16} className="text-yellow-400" />}
+                      {isSigned ? <FileCheck size={16} className="text-green-400" /> : isCancelled ? <XCircle size={16} className="text-gray-400" /> : <FileText size={16} className="text-yellow-400" />}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-white">{agreementLabel(agr, idx, agreements.length)}</p>
+                      <p className={`text-sm font-medium ${isCancelled ? 'text-gray-500 line-through' : 'text-white'}`}>{agreementLabel(agr, idx, agreements.length)}</p>
                       <div className="flex items-center gap-2 mt-0.5">
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${isSigned ? 'text-green-400 bg-green-500/15' : 'text-yellow-400 bg-yellow-500/15'}`}>
-                          {isSigned ? '✓ Signed' : '⏳ Pending'}
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${isSigned ? 'text-green-400 bg-green-500/15' : isCancelled ? 'text-gray-400 bg-gray-500/15' : 'text-yellow-400 bg-yellow-500/15'}`}>
+                          {isSigned ? '✓ Signed' : isCancelled ? '✕ Cancelled' : '⏳ Pending'}
                         </span>
                         <span className="text-[11px] text-gray-600">
                           {isSigned && agr.signed_at
@@ -394,6 +401,15 @@ export default function DocumentsPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
+                      {isPending && (
+                        <button
+                          onClick={() => openSignModal(agr)}
+                          className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white transition hover:opacity-90"
+                          style={{ background: '#F24822' }}
+                        >
+                          <PenLine size={12} /> Sign
+                        </button>
+                      )}
                       <button
                         onClick={() => setViewingAgreement(agr)}
                         className="px-3 py-1.5 rounded-lg text-xs font-medium transition text-gray-400 hover:text-white hover:bg-white/10"
@@ -415,6 +431,126 @@ export default function DocumentsPage() {
           )}
         </motion.div>
       )}
+
+      {/* ── Signing modal ──────────────────────────── */}
+      <AnimatePresence>
+        {signingAgreement && (
+          <div
+            className="fixed inset-0 z-[200] flex items-center justify-center p-4"
+            style={{ background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)' }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 16 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 16 }}
+              transition={{ type: 'spring', duration: 0.35 }}
+              className="relative w-full max-w-3xl rounded-2xl overflow-hidden flex flex-col"
+              style={{ background: '#161616', border: '1px solid rgba(255,255,255,0.1)', maxHeight: '90vh' }}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between px-6 py-4 border-b shrink-0" style={{ borderColor: 'rgba(255,255,255,0.07)' }}>
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: 'rgba(242,72,34,0.15)', border: '1px solid rgba(242,72,34,0.3)' }}>
+                    <FileText size={15} style={{ color: '#F24822' }} />
+                  </div>
+                  <div>
+                    <h2 className="font-semibold text-white text-sm">Sign Agreement</h2>
+                    <p className="text-xs text-gray-500">Review and sign below</p>
+                  </div>
+                </div>
+                <button onClick={() => setSigningAgreement(null)} className="p-1.5 rounded-lg text-gray-500 hover:text-white hover:bg-white/5 transition">
+                  <X size={16} />
+                </button>
+              </div>
+
+              {/* Content */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-5">
+                {signSuccess ? (
+                  <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="text-center py-12">
+                    <div className="w-16 h-16 rounded-full bg-green-500/15 flex items-center justify-center mx-auto mb-4">
+                      <CheckCircle size={32} className="text-green-400" />
+                    </div>
+                    <h3 className="text-xl font-bold text-white mb-2">Agreement Signed!</h3>
+                    <p className="text-gray-400 text-sm mb-6">Your signature has been recorded successfully.</p>
+                    <button
+                      onClick={() => setSigningAgreement(null)}
+                      className="px-6 py-2.5 rounded-xl text-sm font-semibold text-white transition hover:opacity-90"
+                      style={{ background: 'linear-gradient(135deg, #9B0EE5, #F24822)' }}
+                    >
+                      Close
+                    </button>
+                  </motion.div>
+                ) : (
+                  <>
+                    {/* Agreement document */}
+                    <div className="rounded-xl overflow-hidden border border-white/10">
+                      <div className="bg-white overflow-y-auto" style={{ maxHeight: '40vh' }}>
+                        <div dangerouslySetInnerHTML={{ __html: signingAgreement.agreement_html }} />
+                      </div>
+                    </div>
+
+                    {/* Signing section */}
+                    <div className="space-y-4 p-5 rounded-2xl" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-400 mb-2 uppercase tracking-wide">
+                          Type your full legal name to sign
+                        </label>
+                        <input
+                          type="text"
+                          value={signerName}
+                          onChange={e => setSignerName(e.target.value)}
+                          placeholder="Your full legal name"
+                          className="w-full px-4 py-3 rounded-xl text-sm text-white placeholder-gray-600 outline-none transition"
+                          style={{ background: '#1f1f1f', border: '1px solid rgba(255,255,255,0.1)' }}
+                          onFocus={e => (e.target.style.borderColor = 'rgba(242,72,34,0.5)')}
+                          onBlur={e => (e.target.style.borderColor = 'rgba(255,255,255,0.1)')}
+                        />
+                      </div>
+
+                      <label className="flex items-start gap-3 cursor-pointer group">
+                        <div className="relative mt-0.5">
+                          <input type="checkbox" checked={signConsent} onChange={e => setSignConsent(e.target.checked)} className="sr-only" />
+                          <div className={`w-4 h-4 rounded border transition-all flex items-center justify-center ${signConsent ? 'border-transparent' : 'border-white/20'}`} style={signConsent ? { background: '#F24822' } : {}}>
+                            {signConsent && <CheckCircle size={12} className="text-white" />}
+                          </div>
+                        </div>
+                        <span className="text-xs text-gray-400 leading-relaxed group-hover:text-gray-300 transition">
+                          I agree to this equity agreement and understand this constitutes a legal electronic signature under the U.S. ESIGN Act.
+                        </span>
+                      </label>
+
+                      {signError && (
+                        <p className="text-red-400 text-xs flex items-center gap-1.5">
+                          <AlertCircle size={12} /> {signError}
+                        </p>
+                      )}
+
+                      <button
+                        onClick={handleSign}
+                        disabled={!signerName.trim() || !signConsent || signing}
+                        className="w-full py-3 rounded-xl text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        style={{ background: 'linear-gradient(135deg, #9B0EE5, #F24822)' }}
+                      >
+                        {signing ? (
+                          <>
+                            <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                            Signing…
+                          </>
+                        ) : (
+                          <>
+                            <PenLine size={14} />
+                            Sign Agreement
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* ── Agreement viewer modal ──────────────── */}
       <AnimatePresence>
