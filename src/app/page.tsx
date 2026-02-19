@@ -1,20 +1,18 @@
-import { Navbar } from '@/components/layout/Navbar'
-import { Hero } from '@/components/sections/Hero'
-import { Features } from '@/components/sections/Features'
-import { HowItWorks } from '@/components/sections/HowItWorks'
-import { Pricing } from '@/components/sections/Pricing'
-import { CTA } from '@/components/sections/CTA'
-import { Footer } from '@/components/layout/Footer'
+import Navbar from '@/components/Navbar'
+import Hero from '@/components/Hero'
+import WhatWeDo from '@/components/WhatWeDo'
+import WhyUs from '@/components/WhyUs'
+import ApplicationForm from '@/components/ApplicationForm'
+import Footer from '@/components/Footer'
 
 export default function Home() {
   return (
-    <main className="min-h-screen bg-[#0a0a0f]">
+    <main className="min-h-screen bg-[var(--bg-dark)]">
       <Navbar />
       <Hero />
-      <Features />
-      <HowItWorks />
-      <Pricing />
-      <CTA />
+      <WhatWeDo />
+      <WhyUs />
+      <ApplicationForm />
       <Footer />
     </main>
   )
