@@ -1,41 +1,71 @@
 'use client'
-import { motion } from 'framer-motion'
+import { motion, useInView } from 'framer-motion'
+import { useRef, useEffect, useState } from 'react'
 
 const stats = [
-  { value: '12+', label: 'Brands Launched' },
-  { value: '340%', label: 'Average Revenue Growth' },
-  { value: '$2.4M', label: 'Total GMV Generated' },
-  { value: '96%', label: 'Founder Satisfaction' },
+  { value: 500, prefix: '$', suffix: 'M+', label: 'Generated for Brands, Clients & Partners' },
+  { value: 15, prefix: '', suffix: '+', label: 'Brands Launched' },
+  { value: 7, prefix: '', suffix: 'B+', label: 'Views Generated' },
+  { value: 50, prefix: '', suffix: '+', label: 'Global Partners' },
 ]
 
-export default function Stats() {
+function AnimatedNumber({ value, prefix, suffix, inView }: { value: number; prefix: string; suffix: string; inView: boolean }) {
+  const [display, setDisplay] = useState(0)
+
+  useEffect(() => {
+    if (!inView) return
+    const duration = 1500
+    const steps = 40
+    const increment = value / steps
+    let current = 0
+    const timer = setInterval(() => {
+      current += increment
+      if (current >= value) {
+        setDisplay(value)
+        clearInterval(timer)
+      } else {
+        setDisplay(Math.floor(current))
+      }
+    }, duration / steps)
+    return () => clearInterval(timer)
+  }, [inView, value])
+
   return (
-    <section className="relative py-20 px-6">
-      <div className="max-w-5xl mx-auto">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: '-80px' }}
-          transition={{ duration: 0.6 }}
-          className="rounded-2xl border border-white/[0.06] bg-white/[0.02] backdrop-blur-md p-10 md:p-14"
-        >
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
-            {stats.map((s, i) => (
-              <motion.div
-                key={s.label}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.5, delay: i * 0.1 }}
-                className="text-center"
-              >
-                <div className="text-3xl md:text-4xl font-black gradient-text mb-2">{s.value}</div>
-                <div className="text-sm text-gray-500">{s.label}</div>
-              </motion.div>
-            ))}
-          </div>
-        </motion.div>
-      </div>
+    <span className="gradient-text text-4xl sm:text-5xl md:text-6xl font-black tabular-nums">
+      {prefix}{display}{suffix}
+    </span>
+  )
+}
+
+export default function Stats() {
+  const ref = useRef(null)
+  const inView = useInView(ref, { once: true, margin: '-100px' })
+
+  return (
+    <section className="relative py-20 px-6" ref={ref}>
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true }}
+        transition={{ duration: 0.6 }}
+        className="max-w-5xl mx-auto rounded-2xl border border-white/[0.06] bg-white/[0.02] backdrop-blur-sm p-8 md:p-12"
+      >
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-4">
+          {stats.map((stat, i) => (
+            <motion.div
+              key={stat.label}
+              initial={{ opacity: 0, y: 15 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: i * 0.1, duration: 0.5 }}
+              className={`text-center ${i < stats.length - 1 ? 'md:border-r md:border-white/[0.06]' : ''}`}
+            >
+              <AnimatedNumber value={stat.value} prefix={stat.prefix} suffix={stat.suffix} inView={inView} />
+              <p className="text-xs sm:text-sm text-gray-500 mt-2 leading-tight">{stat.label}</p>
+            </motion.div>
+          ))}
+        </div>
+      </motion.div>
     </section>
   )
 }
