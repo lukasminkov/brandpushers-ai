@@ -105,7 +105,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* ── Sidebar ─────────────────────────────────────── */}
       <aside
-        className="flex flex-col border-r shrink-0 relative"
+        className="flex flex-col border-r shrink-0 sticky top-0 h-screen"
         style={{
           width: '240px',
           borderColor: 'rgba(255,255,255,0.06)',
@@ -136,7 +136,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
 
         {/* Nav items */}
-        <nav className="flex-1 p-3 pt-4 space-y-1">
+        <nav className="flex-1 p-3 pt-4 space-y-1 overflow-y-auto">
           {nav.map(n => {
             const isActive =
               pathname === n.href ||
