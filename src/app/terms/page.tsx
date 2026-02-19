@@ -60,7 +60,7 @@ export default function TermsPage() {
           <section>
             <h2 className="text-2xl font-bold text-white mb-4">3. Program Fee</h2>
             <p>
-              Participation in the BrandPushers Accelerator Program requires payment of a program fee determined on a case-by-case basis, generally ranging from <strong className="text-white">$10,000 to $20,000 USD</strong> (or as otherwise specified in your individual program agreement). The exact fee will be disclosed and agreed upon in writing before you are admitted to the Program.
+              Participation in the BrandPushers Accelerator Program requires payment of a program fee determined on a case-by-case basis. The exact fee will be disclosed and agreed upon in writing before you are admitted to the Program.
             </p>
             <p className="mt-4">
               The program fee is due in full (or according to a payment schedule specified in your agreement) before or upon program commencement. We accept payment methods as specified in your individual program agreement, which may include wire transfer, ACH, or other payment methods.
