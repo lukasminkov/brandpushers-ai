@@ -16,7 +16,7 @@ interface EquityStake {
   id: string; brand_member_id: string; stakeholder_name: string
   stakeholder_type: 'individual' | 'company'; stakeholder_email: string | null
   stakeholder_address: string | null; stakeholder_company_name: string | null
-  equity_percentage: number; created_at: string
+  equity_percentage: number; created_at: string; is_member?: boolean
 }
 interface EquityAgreement {
   id: string; status: 'pending' | 'signed' | 'expired' | 'revoked'
@@ -166,7 +166,7 @@ export default function EquityPage() {
     if (member) {
       const memberName = member.full_name || member.email
       const hasMemberStake = stakesList.some(
-        st => st.stakeholder_name === memberName || st.stakeholder_email === member.email
+        st => st.is_member || st.stakeholder_email === member.email
       )
       if (!hasMemberStake) {
         const { data: newStake } = await supabase.from('equity_stakes').insert({
@@ -175,6 +175,7 @@ export default function EquityPage() {
           stakeholder_type: 'individual',
           stakeholder_email: member.email,
           equity_percentage: 0,
+          is_member: true,
         }).select('*').single()
         if (newStake) stakesList.unshift(newStake as EquityStake)
       }
@@ -304,8 +305,7 @@ export default function EquityPage() {
   /* Check if a stake belongs to the selected member */
   const isMemberStake = (s: EquityStake): boolean => {
     if (!selected) return false
-    const memberName = selected.full_name || selected.email
-    return s.stakeholder_name === memberName || s.stakeholder_email === selected.email
+    return !!s.is_member || s.stakeholder_email === selected.email
   }
 
   /* View agreement HTML */
