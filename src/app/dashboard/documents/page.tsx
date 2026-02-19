@@ -1,11 +1,12 @@
 'use client'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Upload, FileText, Trash2, ExternalLink, FileCheck, Loader2,
   FolderPlus, Folder, ChevronRight, ArrowLeft, MoreVertical,
-  FolderOpen, File, Download, PenLine, CheckCircle, AlertCircle, X, XCircle
+  FolderOpen, File, Download, PenLine, CheckCircle, AlertCircle, X, XCircle,
+  FolderInput
 } from 'lucide-react'
 
 /* ─── Types ──────────────────────────────────── */
@@ -46,6 +47,29 @@ function Tab({ active, label, count, onClick }: { active: boolean; label: string
   )
 }
 
+/* ─── Context Menu ────────────────────────────── */
+function ContextMenu({ items, onClose }: { items: { icon: React.ReactNode; label: string; onClick: () => void; danger?: boolean }[]; onClose: () => void }) {
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) onClose() }
+    const keyHandler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('mousedown', handler)
+    document.addEventListener('keydown', keyHandler)
+    return () => { document.removeEventListener('mousedown', handler); document.removeEventListener('keydown', keyHandler) }
+  }, [onClose])
+  return (
+    <div ref={ref} className="absolute right-0 top-full mt-1 z-50 min-w-[160px] bg-[#1a1a1a] border border-white/10 rounded-xl shadow-xl p-1">
+      {items.map((item, i) => (
+        <button key={i} onClick={() => { item.onClick(); onClose() }}
+          className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm rounded-lg transition ${item.danger ? 'text-red-400 hover:bg-red-500/10' : 'text-gray-300 hover:bg-white/5'}`}>
+          {item.icon}
+          {item.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 /* ════════════════════════════════════════════════ */
 export default function DocumentsPage() {
   const supabase = createClient()
@@ -64,6 +88,13 @@ export default function DocumentsPage() {
   const [signing, setSigning] = useState(false)
   const [signError, setSignError] = useState('')
   const [signSuccess, setSignSuccess] = useState(false)
+
+  // Context menu & inline editing state
+  const [openMenu, setOpenMenu] = useState<string | null>(null)
+  const [renamingId, setRenamingId] = useState<string | null>(null) // doc id or folder path
+  const [renameValue, setRenameValue] = useState('')
+  const [moveTarget, setMoveTarget] = useState<Doc | null>(null) // file being moved
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null) // doc id or folder path
 
   const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -120,7 +151,6 @@ export default function DocumentsPage() {
     if (!newFolderName.trim()) return
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
-    // Create a placeholder doc entry to represent the folder
     await supabase.from('documents').insert({
       user_id: user.id,
       name: '__folder__',
@@ -129,6 +159,64 @@ export default function DocumentsPage() {
     })
     setNewFolderName('')
     setShowNewFolder(false)
+    load()
+  }
+
+  /* ── Rename file ─────────────────────────────── */
+  const renameFile = async (docId: string, newName: string) => {
+    if (!newName.trim()) return
+    await supabase.from('documents').update({ name: newName.trim() }).eq('id', docId)
+    setRenamingId(null)
+    load()
+  }
+
+  /* ── Rename folder ───────────────────────────── */
+  const renameFolder = async (oldPath: string, newName: string) => {
+    if (!newName.trim()) return
+    const parts = oldPath.split('/')
+    parts[parts.length - 1] = newName.trim()
+    const newPath = parts.join('/')
+    if (newPath === oldPath) { setRenamingId(null); return }
+
+    // Update all docs whose folder starts with oldPath
+    const { data: allDocs } = await supabase.from('documents').select('id, folder').filter('folder', 'not.is', null)
+    if (allDocs) {
+      const updates = allDocs.filter(d => d.folder === oldPath || d.folder?.startsWith(oldPath + '/'))
+      for (const d of updates) {
+        const updatedFolder = newPath + (d.folder!.slice(oldPath.length))
+        await supabase.from('documents').update({ folder: updatedFolder }).eq('id', d.id)
+      }
+    }
+    setRenamingId(null)
+    // If we're inside the renamed folder, update currentFolder
+    if (currentFolder === oldPath || currentFolder?.startsWith(oldPath + '/')) {
+      setCurrentFolder(newPath + (currentFolder!.slice(oldPath.length)))
+    }
+    load()
+  }
+
+  /* ── Delete folder ───────────────────────────── */
+  const deleteFolder = async (folderPath: string) => {
+    // Check if folder has files (non-placeholder docs)
+    const filesInside = docs.filter(d => d.name !== '__folder__' && (d.folder === folderPath || d.folder?.startsWith(folderPath + '/')))
+    if (filesInside.length > 0) {
+      alert('Cannot delete folder — it contains files. Move or delete them first.')
+      setDeleteConfirm(null)
+      return
+    }
+    // Delete __folder__ placeholder(s) for this path and any empty sub-folders
+    const foldersToDelete = docs.filter(d => d.name === '__folder__' && (d.folder === folderPath || d.folder?.startsWith(folderPath + '/')))
+    for (const d of foldersToDelete) {
+      await supabase.from('documents').delete().eq('id', d.id)
+    }
+    setDeleteConfirm(null)
+    load()
+  }
+
+  /* ── Move file ───────────────────────────────── */
+  const moveFile = async (doc: Doc, targetFolder: string | null) => {
+    await supabase.from('documents').update({ folder: targetFolder }).eq('id', doc.id)
+    setMoveTarget(null)
     load()
   }
 
@@ -288,57 +376,128 @@ export default function DocumentsPage() {
               {/* Folders */}
               {folders.map(f => {
                 const folderName = f.includes('/') ? f.split('/').pop()! : f
+                const isRenaming = renamingId === `folder:${f}`
+                const isDeleting = deleteConfirm === `folder:${f}`
                 return (
-                  <motion.button
+                  <motion.div
                     key={f}
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    onClick={() => setCurrentFolder(f)}
-                    className="w-full flex items-center gap-3 p-3.5 rounded-xl hover:bg-white/[0.04] transition text-left group"
+                    className="relative flex items-center gap-3 p-3.5 rounded-xl hover:bg-white/[0.04] transition text-left group"
                   >
-                    <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'rgba(155,14,229,0.1)', border: '1px solid rgba(155,14,229,0.2)' }}>
-                      <Folder size={15} style={{ color: '#9B0EE5' }} />
-                    </div>
-                    <span className="flex-1 text-sm font-medium text-white">{folderName}</span>
-                    <ChevronRight size={14} className="text-gray-600 group-hover:text-gray-400 transition" />
-                  </motion.button>
+                    <button onClick={() => setCurrentFolder(f)} className="flex items-center gap-3 flex-1 min-w-0">
+                      <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'rgba(155,14,229,0.1)', border: '1px solid rgba(155,14,229,0.2)' }}>
+                        <Folder size={15} style={{ color: '#9B0EE5' }} />
+                      </div>
+                      {isRenaming ? (
+                        <input
+                          autoFocus
+                          className="flex-1 bg-[#1a1a1a] border border-white/10 rounded-lg px-2 py-1 text-sm text-white focus:outline-none focus:border-[#F24822]/40"
+                          value={renameValue}
+                          onChange={e => setRenameValue(e.target.value)}
+                          onClick={e => e.stopPropagation()}
+                          onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') renameFolder(f, renameValue); if (e.key === 'Escape') setRenamingId(null) }}
+                          onBlur={() => setRenamingId(null)}
+                        />
+                      ) : (
+                        <span className="flex-1 text-sm font-medium text-white truncate">{folderName}</span>
+                      )}
+                    </button>
+                    {isDeleting ? (
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-xs text-gray-400">Delete?</span>
+                        <button onClick={() => deleteFolder(f)} className="px-2 py-1 text-xs rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 transition">Yes</button>
+                        <button onClick={() => setDeleteConfirm(null)} className="px-2 py-1 text-xs rounded-lg text-gray-500 hover:text-white transition">No</button>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="relative shrink-0 opacity-0 group-hover:opacity-100 transition">
+                          <button onClick={e => { e.stopPropagation(); setOpenMenu(openMenu === `folder:${f}` ? null : `folder:${f}`) }}
+                            className="p-1.5 rounded-lg text-gray-500 hover:text-white hover:bg-white/5 transition">
+                            <MoreVertical size={14} />
+                          </button>
+                          {openMenu === `folder:${f}` && (
+                            <ContextMenu onClose={() => setOpenMenu(null)} items={[
+                              { icon: <PenLine size={13} />, label: 'Rename', onClick: () => { setRenamingId(`folder:${f}`); setRenameValue(folderName) } },
+                              { icon: <Trash2 size={13} />, label: 'Delete', danger: true, onClick: () => setDeleteConfirm(`folder:${f}`) },
+                            ]} />
+                          )}
+                        </div>
+                        <ChevronRight size={14} className="text-gray-600 group-hover:text-gray-400 transition shrink-0" />
+                      </>
+                    )}
+                  </motion.div>
                 )
               })}
               {/* Files */}
-              {filesInFolder.map((doc, i) => (
-                <motion.div
-                  key={doc.id}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: i * 0.03 }}
-                  className="flex items-center gap-3 p-3.5 rounded-xl group hover:bg-white/[0.03] transition"
-                >
-                  <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
-                    style={{ background: 'rgba(242,72,34,0.08)', border: '1px solid rgba(242,72,34,0.15)' }}
+              {filesInFolder.map((doc, i) => {
+                const isRenaming = renamingId === doc.id
+                const isDeleting = deleteConfirm === doc.id
+                return (
+                  <motion.div
+                    key={doc.id}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: i * 0.03 }}
+                    className="relative flex items-center gap-3 p-3.5 rounded-xl group hover:bg-white/[0.03] transition"
                   >
-                    <File size={15} style={{ color: '#F24822' }} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <a href={doc.file_url} target="_blank" rel="noopener noreferrer"
-                      className="text-sm font-medium text-white hover:text-[#F24822] transition truncate block">
-                      {doc.name}
-                    </a>
-                    <p className="text-[11px] text-gray-600">
-                      {new Date(doc.uploaded_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition">
-                    <a href={doc.file_url} target="_blank" rel="noopener noreferrer"
-                      className="p-1.5 rounded-lg text-gray-500 hover:text-[#F24822] hover:bg-[#F24822]/10 transition" title="Open">
-                      <ExternalLink size={13} />
-                    </a>
-                    <button onClick={() => remove(doc)}
-                      className="p-1.5 rounded-lg text-gray-600 hover:text-red-400 hover:bg-red-500/10 transition" title="Delete">
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
-                </motion.div>
-              ))}
+                    <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
+                      style={{ background: 'rgba(242,72,34,0.08)', border: '1px solid rgba(242,72,34,0.15)' }}
+                    >
+                      <File size={15} style={{ color: '#F24822' }} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      {isRenaming ? (
+                        <input
+                          autoFocus
+                          className="w-full bg-[#1a1a1a] border border-white/10 rounded-lg px-2 py-1 text-sm text-white focus:outline-none focus:border-[#F24822]/40"
+                          value={renameValue}
+                          onChange={e => setRenameValue(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') renameFile(doc.id, renameValue); if (e.key === 'Escape') setRenamingId(null) }}
+                          onBlur={() => setRenamingId(null)}
+                        />
+                      ) : (
+                        <>
+                          <a href={doc.file_url} target="_blank" rel="noopener noreferrer"
+                            className="text-sm font-medium text-white hover:text-[#F24822] transition truncate block">
+                            {doc.name}
+                          </a>
+                          <p className="text-[11px] text-gray-600">
+                            {new Date(doc.uploaded_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+                          </p>
+                        </>
+                      )}
+                    </div>
+                    {isDeleting ? (
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-xs text-gray-400">Delete?</span>
+                        <button onClick={() => { remove(doc); setDeleteConfirm(null) }} className="px-2 py-1 text-xs rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 transition">Yes</button>
+                        <button onClick={() => setDeleteConfirm(null)} className="px-2 py-1 text-xs rounded-lg text-gray-500 hover:text-white transition">No</button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition">
+                        <a href={doc.file_url} target="_blank" rel="noopener noreferrer"
+                          className="p-1.5 rounded-lg text-gray-500 hover:text-[#F24822] hover:bg-[#F24822]/10 transition" title="Open">
+                          <ExternalLink size={13} />
+                        </a>
+                        <div className="relative">
+                          <button onClick={() => setOpenMenu(openMenu === doc.id ? null : doc.id)}
+                            className="p-1.5 rounded-lg text-gray-500 hover:text-white hover:bg-white/5 transition">
+                            <MoreVertical size={14} />
+                          </button>
+                          {openMenu === doc.id && (
+                            <ContextMenu onClose={() => setOpenMenu(null)} items={[
+                              { icon: <PenLine size={13} />, label: 'Rename', onClick: () => { setRenamingId(doc.id); setRenameValue(doc.name) } },
+                              { icon: <FolderInput size={13} />, label: 'Move to…', onClick: () => setMoveTarget(doc) },
+                              { icon: <Trash2 size={13} />, label: 'Delete', danger: true, onClick: () => setDeleteConfirm(doc.id) },
+                            ]} />
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </motion.div>
+                )
+              })}
             </div>
           )}
         </motion.div>
@@ -431,6 +590,35 @@ export default function DocumentsPage() {
           )}
         </motion.div>
       )}
+
+      {/* ── Move to modal ─────────────────────────── */}
+      <AnimatePresence>
+        {moveTarget && (
+          <div className="fixed inset-0 z-[150] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)' }}
+            onClick={e => { if (e.target === e.currentTarget) setMoveTarget(null) }}>
+            <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.96 }}
+              className="w-full max-w-sm rounded-2xl overflow-hidden" style={{ background: '#161616', border: '1px solid rgba(255,255,255,0.1)' }}>
+              <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: 'rgba(255,255,255,0.07)' }}>
+                <h3 className="text-sm font-semibold text-white">Move &quot;{moveTarget.name}&quot;</h3>
+                <button onClick={() => setMoveTarget(null)} className="p-1 rounded-lg text-gray-500 hover:text-white transition"><X size={14} /></button>
+              </div>
+              <div className="p-3 max-h-64 overflow-y-auto space-y-0.5">
+                <button onClick={() => moveFile(moveTarget, null)}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition ${moveTarget.folder === null ? 'bg-white/5 text-white' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`}>
+                  <Folder size={14} /> My Files {moveTarget.folder === null && <span className="ml-auto text-[10px] text-gray-500">current</span>}
+                </button>
+                {Array.from(new Set(docs.filter(d => d.name === '__folder__' && d.folder).map(d => d.folder!))).sort().map(f => (
+                  <button key={f} onClick={() => moveFile(moveTarget, f)}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition ${moveTarget.folder === f ? 'bg-white/5 text-white' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`}
+                    style={{ paddingLeft: `${(f.split('/').length - 1) * 16 + 12}px` }}>
+                    <Folder size={14} /> {f.split('/').pop()} {moveTarget.folder === f && <span className="ml-auto text-[10px] text-gray-500">current</span>}
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* ── Signing modal ──────────────────────────── */}
       <AnimatePresence>
