@@ -9,6 +9,8 @@ import {
   FolderInput
 } from 'lucide-react'
 
+const FOLDER_COLORS = ['#9B0EE5', '#F24822', '#3B82F6', '#10B981', '#F59E0B', '#EC4899', '#06B6D4', '#8B5CF6']
+
 /* ─── Types ──────────────────────────────────── */
 interface Doc {
   id: string
@@ -374,20 +376,21 @@ export default function DocumentsPage() {
           ) : (
             <div className="space-y-1">
               {/* Folders */}
-              {folders.map(f => {
+              {folders.map((f, fi) => {
                 const folderName = f.includes('/') ? f.split('/').pop()! : f
                 const isRenaming = renamingId === `folder:${f}`
                 const isDeleting = deleteConfirm === `folder:${f}`
+                const color = FOLDER_COLORS[fi % FOLDER_COLORS.length]
                 return (
                   <motion.div
                     key={f}
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    className="relative flex items-center gap-3 p-3.5 rounded-xl hover:bg-white/[0.04] transition text-left group"
+                    className="relative flex items-center p-3.5 rounded-xl hover:bg-white/[0.04] transition text-left group"
                   >
-                    <button onClick={() => setCurrentFolder(f)} className="flex items-center gap-3 flex-1 min-w-0">
-                      <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'rgba(155,14,229,0.1)', border: '1px solid rgba(155,14,229,0.2)' }}>
-                        <Folder size={15} style={{ color: '#9B0EE5' }} />
+                    <button onClick={() => setCurrentFolder(f)} className="flex items-center gap-3 flex-1 min-w-0 text-left">
+                      <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: `${color}18`, border: `1px solid ${color}33` }}>
+                        <Folder size={15} style={{ color }} />
                       </div>
                       {isRenaming ? (
                         <input
