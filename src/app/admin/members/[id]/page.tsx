@@ -5,8 +5,9 @@ import { createClient } from '@/lib/supabase/client'
 import EquityManager from '@/components/admin/EquityManager'
 import {
   ArrowLeft, User, PieChart, FileText, Calendar, MapPin,
-  CheckCircle, AlertCircle, Building2, Mail, Clock
+  CheckCircle, AlertCircle, Building2, Mail, Clock, BookOpen
 } from 'lucide-react'
+import AdminBibleView from '@/components/admin/AdminBibleView'
 
 interface MemberProfile {
   id: string
@@ -39,7 +40,7 @@ interface Agreement {
   signed_at: string | null
 }
 
-type Tab = 'overview' | 'equity' | 'documents'
+type Tab = 'overview' | 'equity' | 'documents' | 'bible'
 
 export default function MemberDetailPage() {
   const params = useParams()
@@ -107,6 +108,7 @@ export default function MemberDetailPage() {
     { key: 'overview', label: 'Overview', icon: <User size={14} /> },
     { key: 'equity', label: 'Equity', icon: <PieChart size={14} /> },
     { key: 'documents', label: 'Documents', icon: <FileText size={14} /> },
+    { key: 'bible', label: 'Bible', icon: <BookOpen size={14} /> },
   ]
 
   return (
@@ -337,6 +339,9 @@ export default function MemberDetailPage() {
             </>
           )}
         </div>
+      )}
+      {tab === 'bible' && (
+        <AdminBibleView memberId={member.id} memberName={member.full_name} />
       )}
     </div>
   )

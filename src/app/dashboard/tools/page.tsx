@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { useRouter } from 'next/navigation'
 import { Search, ExternalLink, Wrench } from 'lucide-react'
 
 interface Tool {
@@ -16,8 +17,14 @@ interface Tool {
   sort_order: number
 }
 
+// Internal tool routes - tools with these names route internally instead of external links
+const INTERNAL_TOOLS: Record<string, string> = {
+  'The Bible': '/dashboard/tools/bible',
+}
+
 export default function MemberToolsPage() {
   const supabase = createClient()
+  const router = useRouter()
   const [tools, setTools] = useState<Tool[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -69,12 +76,18 @@ export default function MemberToolsPage() {
           <div key={cat} className="mb-10">
             <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">{cat}</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {items.map(t => (
+              {items.map(t => {
+                const internalRoute = INTERNAL_TOOLS[t.name]
+                const handleClick = internalRoute
+                  ? (e: React.MouseEvent) => { e.preventDefault(); router.push(internalRoute) }
+                  : undefined
+                return (
                 <a
                   key={t.id}
-                  href={t.link || '#'}
-                  target={t.link ? '_blank' : undefined}
-                  rel="noopener noreferrer"
+                  href={internalRoute || t.link || '#'}
+                  target={!internalRoute && t.link ? '_blank' : undefined}
+                  rel={!internalRoute && t.link ? 'noopener noreferrer' : undefined}
+                  onClick={handleClick}
                   className="group rounded-2xl overflow-hidden transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-black/30 cursor-pointer"
                   style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
                 >
@@ -112,7 +125,8 @@ export default function MemberToolsPage() {
                     {t.description && <p className="text-gray-500 text-xs mt-1.5 line-clamp-2">{t.description}</p>}
                   </div>
                 </a>
-              ))}
+                )
+              })}
             </div>
           </div>
         ))
