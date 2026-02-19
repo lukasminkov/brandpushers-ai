@@ -406,7 +406,7 @@ export default function NotificationsPanel({
                   <p className="text-xs text-gray-600 mt-1">Updates from your program will appear here</p>
                 </div>
               ) : (
-                <div className="divide-y" style={{ divideColor: 'rgba(255,255,255,0.04)' }}>
+                <div className="divide-y divide-white/[0.04]">
                   {notifications.map(notif => (
                     <button
                       key={notif.id}

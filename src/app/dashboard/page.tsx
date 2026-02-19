@@ -91,9 +91,10 @@ export default function DashboardPage() {
     if (!user) return
     setUserId(user.id)
 
-    const [profileRes, phasesRes, stepsRes, progressRes, agreementsRes, stakesRes] = await Promise.all([
+    // Core profile fields (always exist)
+    const [profileCoreRes, phasesRes, stepsRes, progressRes, agreementsRes, stakesRes] = await Promise.all([
       supabase.from('profiles')
-        .select('id, full_name, email, brand_name, company_name, company_type, ein, company_address, equity_percentage, fee_amount, equity_agreed')
+        .select('id, full_name, email, brand_name, equity_percentage, fee_amount, equity_agreed')
         .eq('id', user.id).single(),
       supabase.from('phases').select('*').order('sort_order'),
       supabase.from('phase_steps').select('*').order('sort_order'),
@@ -102,7 +103,18 @@ export default function DashboardPage() {
       supabase.from('equity_stakes').select('id, stakeholder_name, equity_percentage, stakeholder_type').eq('brand_member_id', user.id),
     ])
 
-    const p = (profileRes.data || {}) as Profile
+    // New company info columns (only exist after migration 003) — fetch separately
+    const { data: companyData } = await supabase.from('profiles')
+      .select('company_name, company_type, ein, company_address')
+      .eq('id', user.id).single()
+
+    const p = {
+      ...(profileCoreRes.data || {}),
+      company_name: companyData?.company_name ?? null,
+      company_type: companyData?.company_type ?? null,
+      ein: companyData?.ein ?? null,
+      company_address: companyData?.company_address ?? null,
+    } as Profile
     setProfile(p)
     const phaseList = (phasesRes.data || []) as Phase[]
     setPhases(phaseList)
