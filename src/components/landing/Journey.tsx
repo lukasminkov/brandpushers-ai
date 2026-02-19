@@ -57,13 +57,14 @@ export default function Journey() {
           className="text-center mb-20"
         >
           <span className="text-sm font-semibold tracking-widest uppercase text-[#F24822] mb-4 block">
-            The Journey
+            How It Works
           </span>
           <h2 className="text-4xl md:text-5xl lg:text-6xl font-black mb-5">
-            From <span className="gradient-text">Idea</span> to <span className="gradient-text">Exit</span>
+            Four Phases.{' '}
+            <span className="gradient-text">One Partnership.</span>
           </h2>
           <p className="text-gray-400 text-lg max-w-2xl mx-auto leading-relaxed">
-            We partner as equity co-builders at every stage. This isn&apos;t a service — it&apos;s a partnership with skin in the game.
+            Every brand goes through the same battle-tested process. Here&apos;s what it looks like when we build together.
           </p>
         </motion.div>
 
