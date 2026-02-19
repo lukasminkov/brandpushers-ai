@@ -21,7 +21,8 @@ export default function AdminPage() {
   const supabase = createClient()
 
   const load = async () => {
-    const { data } = await supabase.from('applications').select('*, profiles(email, full_name)').order('created_at', { ascending: false })
+    const { data, error } = await supabase.from('applications').select('*').order('created_at', { ascending: false })
+    if (error) console.error('Applications load error:', error)
     setApps((data || []) as Application[])
     setLoading(false)
   }
