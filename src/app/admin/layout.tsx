@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
-import { LayoutDashboard, Users, Layers, BookOpen, LogOut } from 'lucide-react'
+import { LayoutDashboard, Users, Layers, BookOpen, LogOut, PieChart } from 'lucide-react'
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const [ok, setOk] = useState(false)
@@ -26,6 +26,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const nav = [
     { href: '/admin', icon: LayoutDashboard, label: 'Applications' },
     { href: '/admin/members', icon: Users, label: 'Members' },
+    { href: '/admin/equity', icon: PieChart, label: 'Equity' },
     { href: '/admin/phases', icon: Layers, label: 'Phases' },
     { href: '/admin/resources', icon: BookOpen, label: 'Resources' },
   ]
