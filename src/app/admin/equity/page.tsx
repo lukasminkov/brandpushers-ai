@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { motion, AnimatePresence } from 'framer-motion'
 import AdminModal from '@/components/admin/AdminModal'
+import { useConfirm } from '@/components/ui/ConfirmDialog'
 import {
   Users, Plus, Trash2, Send, Eye, X, ChevronRight, Building2,
   User, Percent, CheckCircle, AlertCircle, FileText, Clock, RefreshCw, Download, BadgeCheck, Pencil
@@ -110,6 +111,7 @@ function generateAgreementHtml(member: Member, stakes: EquityStake[], amendmentN
    ════════════════════════════════════════════════════════════ */
 export default function EquityPage() {
   const supabase = createClient()
+  const { confirm } = useConfirm()
   const [members,       setMembers]       = useState<Member[]>([])
   const [selected,      setSelected]      = useState<Member | null>(null)
   const [stakes,        setStakes]        = useState<EquityStake[]>([])
@@ -354,7 +356,8 @@ export default function EquityPage() {
   }
 
   const cancelAgreement = async (agreementId: string) => {
-    if (!window.confirm('Cancel this pending agreement? This cannot be undone.')) return
+    const ok = await confirm({ title: 'Cancel Agreement', message: 'Cancel this pending agreement? This cannot be undone.', destructive: true })
+    if (!ok) return
     await supabase.from('equity_agreements').update({ status: 'cancelled' }).eq('id', agreementId)
     if (selected) loadMemberData(selected.id)
   }
