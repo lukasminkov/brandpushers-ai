@@ -7,9 +7,16 @@ const fadeUp = (delay = 0) => ({
   transition: { duration: 0.7, delay, ease: [0.25, 0.4, 0.25, 1] as [number, number, number, number] },
 })
 
+const stages = [
+  { label: 'Idea', desc: 'Validate & shape your vision', icon: '💡' },
+  { label: 'Launch', desc: 'Build, brand & go to market', icon: '🚀' },
+  { label: 'Scale', desc: 'Grow revenue with AI & TikTok', icon: '📈' },
+  { label: 'Exit', desc: 'Cash out — together', icon: '💰' },
+]
+
 export default function Hero() {
   return (
-    <section className="relative flex items-center justify-center overflow-hidden pt-32 pb-16">
+    <section className="relative flex items-center justify-center overflow-hidden pt-32 pb-20">
       {/* Background gradient orbs */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute top-[15%] left-[20%] w-[500px] h-[500px] bg-[#9B0EE5]/15 rounded-full blur-[160px] animate-float" />
@@ -37,11 +44,8 @@ export default function Hero() {
           {...fadeUp(0.15)}
           className="text-[2.75rem] sm:text-5xl md:text-6xl lg:text-[4.5rem] font-black leading-[1.05] tracking-tight mb-7"
         >
-          We Don&apos;t Build Brands{' '}
-          <span className="gradient-text">For You.</span>
-          <br />
-          We Build Them{' '}
-          <span className="gradient-text">With You.</span>
+          Your Brand.{' '}
+          <span className="gradient-text">Our Skin in the Game.</span>
         </motion.h1>
 
         {/* Subtitle */}
@@ -49,28 +53,26 @@ export default function Hero() {
           {...fadeUp(0.3)}
           className="text-lg md:text-xl text-gray-400 mb-3 max-w-3xl mx-auto leading-relaxed"
         >
-          BrandPushers is a brand accelerator that takes equity and goes all-in alongside you — from first idea to profitable exit.
+          We take equity and go all-in alongside you — from first idea to profitable exit. AI-powered, TikTok-first, founder-aligned.
         </motion.p>
 
         <motion.p
           {...fadeUp(0.4)}
           className="text-base text-gray-500 mb-10 max-w-2xl mx-auto"
         >
-          TikTok-first · AI-powered · Founder-aligned · We only win when you win
+          We only win when you win.
         </motion.p>
 
         {/* CTAs */}
         <motion.div
           {...fadeUp(0.5)}
-          className="flex flex-col sm:flex-row gap-4 justify-center mb-6"
+          className="flex flex-col sm:flex-row gap-4 justify-center mb-4"
         >
           <a
-            href="https://calendly.com/brandpushers"
-            target="_blank"
-            rel="noopener noreferrer"
+            href="#apply"
             className="group relative px-8 py-4 gradient-bg text-white font-bold rounded-xl text-lg transition-all duration-300 hover:scale-[1.03] hover:shadow-[0_0_40px_rgba(242,72,34,0.4)]"
           >
-            Book an Intro Call
+            Apply Now
             <span className="ml-2 inline-block transition-transform group-hover:translate-x-1">→</span>
           </a>
           <a
@@ -83,33 +85,36 @@ export default function Hero() {
 
         <motion.p
           {...fadeUp(0.6)}
-          className="text-sm text-gray-600"
+          className="text-sm text-gray-600 mb-16"
         >
-          Selective intake — we partner with a limited number of founders each quarter.
+          Selective intake — limited spots each quarter
         </motion.p>
 
-        {/* Visual orb / abstract element */}
+        {/* Journey visualization */}
         <motion.div
-          initial={{ opacity: 0, scale: 0.8 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 1.2, delay: 0.8, ease: [0.25, 0.4, 0.25, 1] as [number, number, number, number] }}
-          className="mt-10 mx-auto relative w-full max-w-2xl h-24"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, delay: 0.7, ease: [0.25, 0.4, 0.25, 1] as [number, number, number, number] }}
+          className="relative max-w-3xl mx-auto"
         >
-          {/* Gradient line connecting Idea → Exit */}
-          <div className="absolute top-1/2 left-[10%] right-[10%] h-px bg-gradient-to-r from-[#9B0EE5] via-[#F24822] to-[#F57B18] opacity-40" />
+          {/* Gradient line */}
+          <div className="absolute top-6 left-[12%] right-[12%] h-[2px] bg-gradient-to-r from-[#9B0EE5] via-[#F24822] to-[#F57B18] opacity-30 hidden sm:block" />
 
-          {/* Stage dots */}
-          <div className="absolute top-1/2 left-[10%] right-[10%] flex justify-between -translate-y-1/2">
-            {['Idea', 'Launch', 'Scale', 'Exit'].map((label, i) => (
-              <div key={label} className="flex flex-col items-center gap-3">
-                <motion.div
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  transition={{ delay: 1 + i * 0.15, type: 'spring', stiffness: 200 }}
-                  className="w-4 h-4 rounded-full border-2 border-[#F24822] bg-[#0a0a0f] shadow-[0_0_12px_rgba(242,72,34,0.5)]"
-                />
-                <span className="text-xs font-semibold text-gray-400 tracking-wide uppercase">{label}</span>
-              </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 sm:gap-4">
+            {stages.map((stage, i) => (
+              <motion.div
+                key={stage.label}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.9 + i * 0.12, duration: 0.5 }}
+                className="flex flex-col items-center text-center"
+              >
+                <div className="w-12 h-12 rounded-full bg-white/[0.06] border border-white/[0.1] flex items-center justify-center text-lg mb-3 relative z-10">
+                  {stage.icon}
+                </div>
+                <span className="text-sm font-bold text-white tracking-wide mb-1">{stage.label}</span>
+                <span className="text-xs text-gray-500 leading-snug">{stage.desc}</span>
+              </motion.div>
             ))}
           </div>
         </motion.div>

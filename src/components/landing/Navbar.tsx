@@ -6,7 +6,7 @@ import { Menu, X } from 'lucide-react'
 const links = [
   { label: 'The Journey', href: '#journey' },
   { label: 'Why Us', href: '#why-us' },
-  { label: 'Get in Touch', href: '#contact' },
+  { label: 'Apply', href: '#apply' },
 ]
 
 export default function Navbar() {
@@ -49,12 +49,16 @@ export default function Navbar() {
             </a>
           ))}
           <a
-            href="https://calendly.com/brandpushers"
-            target="_blank"
-            rel="noopener noreferrer"
+            href="/login"
+            className="text-sm text-gray-400 hover:text-white transition-colors duration-200"
+          >
+            Sign In
+          </a>
+          <a
+            href="#apply"
             className="px-5 py-2 text-sm font-semibold rounded-lg gradient-bg text-white hover:shadow-[0_0_20px_rgba(242,72,34,0.3)] transition-all duration-300"
           >
-            Book a Call
+            Apply Now
           </a>
         </div>
 
@@ -88,12 +92,18 @@ export default function Navbar() {
                 </a>
               ))}
               <a
-                href="https://calendly.com/brandpushers"
-                target="_blank"
-                rel="noopener noreferrer"
+                href="/login"
+                onClick={() => setMenuOpen(false)}
+                className="text-gray-400 hover:text-white transition py-1"
+              >
+                Member Sign In
+              </a>
+              <a
+                href="#apply"
+                onClick={() => setMenuOpen(false)}
                 className="px-5 py-2.5 text-sm font-semibold rounded-lg gradient-bg text-white text-center"
               >
-                Book a Call
+                Apply Now
               </a>
             </div>
           </motion.div>
