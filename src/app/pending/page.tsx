@@ -1,10 +1,41 @@
 'use client'
+import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import Image from 'next/image'
 import Link from 'next/link'
 import { Clock } from 'lucide-react'
 
 export default function PendingPage() {
+  const [checking, setChecking] = useState(true)
+
+  useEffect(() => {
+    const checkRole = async () => {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+        if (profile?.role === 'admin') {
+          window.location.href = '/admin'
+          return
+        }
+        if (profile?.role === 'member') {
+          window.location.href = '/dashboard'
+          return
+        }
+      }
+      setChecking(false)
+    }
+    checkRole()
+  }, [])
+
+  if (checking) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-gray-400">Checking your account...</div>
+      </div>
+    )
+  }
+
   const handleSignOut = async () => {
     const supabase = createClient()
     await supabase.auth.signOut()
