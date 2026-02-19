@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import AdminModal from '@/components/admin/AdminModal'
 import {
   Users, Plus, Trash2, Send, Eye, X, ChevronRight, Building2,
-  User, Percent, CheckCircle, AlertCircle, FileText, Clock, RefreshCw, Download, BadgeCheck
+  User, Percent, CheckCircle, AlertCircle, FileText, Clock, RefreshCw, Download, BadgeCheck, Pencil
 } from 'lucide-react'
 
 /* ─── Types ─────────────────────────────────────────────── */
@@ -135,9 +135,10 @@ export default function EquityPage() {
   const [viewAgreementOpen, setViewAgreementOpen] = useState(false)
   const [viewAgreementHtml, setViewAgreementHtml] = useState('')
 
-  // Inline edit stake
-  const [editingStakeId, setEditingStakeId] = useState<string | null>(null)
-  const [editPct, setEditPct] = useState('')
+  // Edit stakeholder modal
+  const [editOpen, setEditOpen] = useState(false)
+  const [editStake, setEditStake] = useState<EquityStake | null>(null)
+  const [editForm, setEditForm] = useState<AddForm>(EMPTY_FORM)
 
   /* Load members + admin profile */
   useEffect(() => {
@@ -211,14 +212,37 @@ export default function EquityPage() {
     loadMemberData(selected.id)
   }
 
-  /* Save edited stake percentage */
-  const handleSavePct = async (id: string) => {
-    if (!selected) return
-    const val = parseFloat(editPct)
+  /* Open edit modal for a stake */
+  const handleEditOpen = (s: EquityStake) => {
+    setEditStake(s)
+    setEditForm({
+      stakeholder_name: s.stakeholder_name,
+      stakeholder_type: s.stakeholder_type,
+      stakeholder_email: s.stakeholder_email || '',
+      stakeholder_address: s.stakeholder_address || '',
+      stakeholder_company_name: s.stakeholder_company_name || '',
+      equity_percentage: String(s.equity_percentage),
+    })
+    setEditOpen(true)
+  }
+
+  /* Save edited stakeholder */
+  const handleEditSave = async () => {
+    if (!selected || !editStake) return
+    const val = parseFloat(editForm.equity_percentage)
     if (isNaN(val) || val < 0 || val > 100) return
-    await supabase.from('equity_stakes').update({ equity_percentage: val }).eq('id', id)
-    setEditingStakeId(null)
-    setEditPct('')
+    setSaving(true)
+    await supabase.from('equity_stakes').update({
+      stakeholder_name: editForm.stakeholder_name,
+      stakeholder_type: editForm.stakeholder_type,
+      stakeholder_email: editForm.stakeholder_email || null,
+      stakeholder_address: editForm.stakeholder_address || null,
+      stakeholder_company_name: editForm.stakeholder_company_name || null,
+      equity_percentage: val,
+    }).eq('id', editStake.id)
+    setSaving(false)
+    setEditOpen(false)
+    setEditStake(null)
     loadMemberData(selected.id)
   }
 
@@ -523,44 +547,28 @@ export default function EquityPage() {
                           {s.stakeholder_address && <p className="text-xs text-gray-600 truncate max-w-xs">{s.stakeholder_address}</p>}
                         </div>
                         <div className="text-right shrink-0">
-                          {editingStakeId === s.id ? (
-                            <div className="flex items-center gap-1.5">
-                              <input
-                                autoFocus
-                                type="number"
-                                min="0"
-                                max="100"
-                                step="0.5"
-                                value={editPct}
-                                onChange={e => setEditPct(e.target.value)}
-                                onKeyDown={e => { if (e.key === 'Enter') handleSavePct(s.id); if (e.key === 'Escape') setEditingStakeId(null) }}
-                                className="w-20 bg-[#1f1f1f] border border-white/10 rounded-lg px-2 py-1 text-sm text-white text-right focus:outline-none focus:border-[#F24822]/60"
-                              />
-                              <span className="text-sm text-gray-500">%</span>
-                              <button onClick={() => handleSavePct(s.id)} className="p-1 rounded-lg text-green-400 hover:bg-green-500/10 transition">
-                                <CheckCircle size={14}/>
-                              </button>
-                            </div>
-                          ) : (
+                          <p className="text-xl font-bold tabular-nums" style={{ color: COLORS[i % COLORS.length] }}>{s.equity_percentage}%</p>
+                          <p className="text-[11px] text-gray-600 capitalize">{s.stakeholder_type}</p>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            onClick={() => handleEditOpen(s)}
+                            className="p-1.5 rounded-lg text-gray-700 hover:text-brand-orange hover:bg-brand-orange/10 transition opacity-0 group-hover:opacity-100"
+                            title="Edit stakeholder"
+                          >
+                            <Pencil size={14}/>
+                          </button>
+                          {!isMember ? (
                             <button
-                              onClick={() => { setEditingStakeId(s.id); setEditPct(String(s.equity_percentage)) }}
-                              className="text-right hover:opacity-70 transition cursor-pointer"
-                              title="Click to edit"
+                              onClick={() => handleDelete(s.id)}
+                              className="p-1.5 rounded-lg text-gray-700 hover:text-red-400 hover:bg-red-500/10 transition opacity-0 group-hover:opacity-100"
                             >
-                              <p className="text-xl font-bold tabular-nums" style={{ color: COLORS[i % COLORS.length] }}>{s.equity_percentage}%</p>
-                              <p className="text-[11px] text-gray-600 capitalize">{s.stakeholder_type}</p>
+                              <Trash2 size={14}/>
                             </button>
+                          ) : (
+                            <div className="w-[30px]"/>
                           )}
                         </div>
-                        {!isMember && (
-                          <button
-                            onClick={() => handleDelete(s.id)}
-                            className="p-1.5 rounded-lg text-gray-700 hover:text-red-400 hover:bg-red-500/10 transition opacity-0 group-hover:opacity-100"
-                          >
-                            <Trash2 size={14}/>
-                          </button>
-                        )}
-                        {isMember && <div className="w-[30px]"/>}
                       </div>
                       )
                     })}
@@ -737,6 +745,119 @@ export default function EquityPage() {
               type="text"
               value={form.stakeholder_address}
               onChange={e => setForm(p => ({ ...p, stakeholder_address: e.target.value }))}
+              placeholder="Street, City, State, Country"
+              className={inputCls}
+            />
+          </Field>
+        </div>
+      </AdminModal>
+
+      {/* ══════════════════════════════════════════════════════
+          MODAL: Edit Stakeholder  (uses shared AdminModal)
+          ══════════════════════════════════════════════════════ */}
+      <AdminModal
+        open={editOpen}
+        onClose={() => setEditOpen(false)}
+        title="Edit Stakeholder"
+        subtitle="Update stakeholder details"
+        footer={
+          <div className="flex gap-3 justify-end">
+            <button
+              onClick={() => setEditOpen(false)}
+              className="px-5 py-2.5 rounded-xl text-sm font-medium text-gray-400 hover:text-white hover:bg-white/8 transition"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleEditSave}
+              disabled={saving || !editForm.stakeholder_name || !editForm.equity_percentage}
+              className="px-5 py-2.5 rounded-xl text-sm font-semibold bg-brand-orange text-white hover:opacity-90 transition disabled:opacity-40 disabled:cursor-not-allowed min-w-[120px]"
+            >
+              {saving ? (
+                <span className="flex items-center gap-2 justify-center">
+                  <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin"/>
+                  Saving…
+                </span>
+              ) : 'Save Changes'}
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-5">
+          <Field label="Stakeholder Type">
+            <div className="flex gap-2">
+              {(['individual', 'company'] as const).map(t => (
+                <button
+                  key={t}
+                  onClick={() => setEditForm(p => ({ ...p, stakeholder_type: t }))}
+                  className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-all border ${
+                    editForm.stakeholder_type === t
+                      ? 'bg-brand-orange/15 border-brand-orange/50 text-brand-orange'
+                      : 'border-white/10 text-gray-400 hover:border-white/20 hover:text-gray-300'
+                  }`}
+                >
+                  {t === 'individual'
+                    ? <><User size={12} className="inline mr-1.5"/>Individual</>
+                    : <><Building2 size={12} className="inline mr-1.5"/>Company</>}
+                </button>
+              ))}
+            </div>
+          </Field>
+
+          <Field label={editForm.stakeholder_type === 'company' ? 'Contact / Representative Name' : 'Full Legal Name'}>
+            <input
+              type="text"
+              value={editForm.stakeholder_name}
+              onChange={e => setEditForm(p => ({ ...p, stakeholder_name: e.target.value }))}
+              disabled={!!editStake?.is_member}
+              placeholder="Name"
+              className={inputCls + (editStake?.is_member ? ' opacity-50 cursor-not-allowed' : '')}
+            />
+          </Field>
+
+          {editForm.stakeholder_type === 'company' && (
+            <Field label="Legal Entity / Company Name">
+              <input
+                type="text"
+                value={editForm.stakeholder_company_name}
+                onChange={e => setEditForm(p => ({ ...p, stakeholder_company_name: e.target.value }))}
+                placeholder="e.g. WHUT.AI LLC"
+                className={inputCls}
+              />
+            </Field>
+          )}
+
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Email">
+              <input
+                type="email"
+                value={editForm.stakeholder_email}
+                onChange={e => setEditForm(p => ({ ...p, stakeholder_email: e.target.value }))}
+                placeholder="name@example.com"
+                className={inputCls}
+              />
+            </Field>
+            <Field label="Equity %">
+              <div className="relative">
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.5"
+                  value={editForm.equity_percentage}
+                  onChange={e => setEditForm(p => ({ ...p, equity_percentage: e.target.value }))}
+                  className={inputCls + ' pr-10'}
+                />
+                <Percent size={13} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-600 pointer-events-none"/>
+              </div>
+            </Field>
+          </div>
+
+          <Field label={editForm.stakeholder_type === 'company' ? 'Registered Address' : 'Residential Address'}>
+            <input
+              type="text"
+              value={editForm.stakeholder_address}
+              onChange={e => setEditForm(p => ({ ...p, stakeholder_address: e.target.value }))}
               placeholder="Street, City, State, Country"
               className={inputCls}
             />

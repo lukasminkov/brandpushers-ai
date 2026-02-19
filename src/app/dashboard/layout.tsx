@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
-import { LayoutDashboard, FileText, LogOut, Bell, Settings, Zap } from 'lucide-react'
+import { LayoutDashboard, FileText, LogOut, Bell, Settings } from 'lucide-react'
 import OnboardingWizard from '@/components/onboarding/OnboardingWizard'
 import NotificationsPanel from '@/components/dashboard/NotificationsPanel'
 import SettingsModal from '@/components/dashboard/SettingsModal'
@@ -117,12 +117,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           className="flex items-center gap-3 px-5 py-5 border-b"
           style={{ borderColor: 'rgba(255,255,255,0.06)' }}
         >
-          <div
-            className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0"
-            style={{ background: 'linear-gradient(135deg, #9B0EE5, #F24822)' }}
-          >
-            <Zap size={14} className="text-white" />
-          </div>
+          <img src="/logo.svg" alt="BP" width={32} height={32} className="rounded-xl shrink-0" />
           <span
             className="font-bold text-sm"
             style={{
