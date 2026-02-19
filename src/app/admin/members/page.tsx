@@ -56,27 +56,26 @@ export default function MembersPage() {
       if (agreements) {
         for (const a of agreements) {
           if (equityMap[a.brand_member_id] !== undefined) continue
-          // Find BrandPushers stake in snapshot
-          const snapshot = a.total_equity_snapshot as Array<{ name: string; percentage: number }> | null
+          // Find the member's own stake in snapshot (is_member flag)
+          const snapshot = a.total_equity_snapshot as Array<{ name: string; percentage: number; is_member?: boolean }> | null
           if (snapshot) {
-            // Look for a stake that isn't the member themselves
-            const bpStake = snapshot.find(s => s.name?.toLowerCase().includes('brandpushers') || s.name?.toLowerCase().includes('whut'))
-            equityMap[a.brand_member_id] = bpStake?.percentage ?? null
+            const memberStake = snapshot.find(s => s.is_member)
+            equityMap[a.brand_member_id] = memberStake?.percentage ?? null
           }
         }
       }
 
-      // Also check equity_stakes for current equity if no signed agreement
+      // Get member's own equity stake (is_member = true)
       const { data: stakes } = await supabase
         .from('equity_stakes')
-        .select('brand_member_id, stakeholder_name, equity_percentage, is_member')
+        .select('brand_member_id, equity_percentage, is_member')
         .in('brand_member_id', memberIds)
+        .eq('is_member', true)
 
       const stakeMap: Record<string, number> = {}
       if (stakes) {
         for (const s of stakes) {
-          if (!stakeMap[s.brand_member_id]) stakeMap[s.brand_member_id] = 0
-          stakeMap[s.brand_member_id] += Number(s.equity_percentage)
+          stakeMap[s.brand_member_id] = Number(s.equity_percentage)
         }
       }
 
