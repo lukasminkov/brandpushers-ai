@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Upload, FileText, Trash2, ExternalLink, FileCheck, Loader2,
   FolderPlus, Folder, ChevronRight, ArrowLeft, MoreVertical,
-  FolderOpen, File, Download
+  FolderOpen, File, Download, PenLine, CheckCircle, AlertCircle, X, XCircle
 } from 'lucide-react'
 
 /* ─── Types ──────────────────────────────────── */
@@ -58,6 +58,12 @@ export default function DocumentsPage() {
   const [newFolderName, setNewFolderName] = useState('')
   const [showNewFolder, setShowNewFolder] = useState(false)
   const [viewingAgreement, setViewingAgreement] = useState<SignedAgreement | null>(null)
+  const [signingAgreement, setSigningAgreement] = useState<SignedAgreement | null>(null)
+  const [signerName, setSignerName] = useState('')
+  const [signConsent, setSignConsent] = useState(false)
+  const [signing, setSigning] = useState(false)
+  const [signError, setSignError] = useState('')
+  const [signSuccess, setSignSuccess] = useState(false)
 
   const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -68,7 +74,7 @@ export default function DocumentsPage() {
       supabase.from('equity_agreements')
         .select('id, signed_at, sent_at, status, agreement_html')
         .eq('brand_member_id', user.id)
-        .in('status', ['signed', 'pending'])
+        .in('status', ['signed', 'pending', 'cancelled'])
         .order('sent_at', { ascending: false }),
       supabase.from('profiles').select('brand_name').eq('id', user.id).single(),
     ])
@@ -137,6 +143,39 @@ export default function DocumentsPage() {
     URL.revokeObjectURL(url)
   }
 
+  const openSignModal = (agr: SignedAgreement) => {
+    setSigningAgreement(agr)
+    setSignerName('')
+    setSignConsent(false)
+    setSigning(false)
+    setSignError('')
+    setSignSuccess(false)
+  }
+
+  const handleSign = async () => {
+    if (!signingAgreement || !signerName.trim() || !signConsent) return
+    setSigning(true)
+    setSignError('')
+    try {
+      const res = await fetch('/api/sign-agreement', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agreement_id: signingAgreement.id,
+          signer_name: signerName.trim(),
+          consent: 'I agree to this equity agreement and understand this constitutes a legal electronic signature under the ESIGN Act.',
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setSignError(data.error || 'Failed to sign'); setSigning(false); return }
+      setSignSuccess(true)
+      load()
+    } catch {
+      setSignError('Network error — please try again')
+      setSigning(false)
+    }
+  }
+
   const agreementLabel = (agr: SignedAgreement, idx: number, total: number) => {
     if (total === 1) return `Equity Agreement${agr.brand_name ? ` — ${agr.brand_name}` : ''}`
     // Oldest = original, newer ones = amendments
@@ -166,7 +205,7 @@ export default function DocumentsPage() {
   )
 
   return (
-    <div className="p-6 lg:p-8 max-w-5xl">
+    <div className="p-6 lg:p-8">
       {/* Header */}
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mb-6">
         <h1 className="text-3xl font-bold text-white mb-1">Documents</h1>
