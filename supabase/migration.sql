@@ -63,11 +63,17 @@ create table if not exists public.documents (
 );
 
 -- Auto-create profile on signup
+-- Note: minkovgroup@gmail.com is auto-assigned 'admin' role
 create or replace function public.handle_new_user()
 returns trigger as $$
 begin
   insert into public.profiles (id, email, full_name, role)
-  values (new.id, new.email, new.raw_user_meta_data->>'full_name', 'pending');
+  values (
+    new.id,
+    new.email,
+    new.raw_user_meta_data->>'full_name',
+    case when new.email = 'minkovgroup@gmail.com' then 'admin' else 'pending' end
+  );
   return new;
 end;
 $$ language plpgsql security definer;
