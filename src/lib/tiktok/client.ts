@@ -191,6 +191,7 @@ export async function fetchOrders(
     create_time_ge: startTime,
     create_time_lt: endTime,
     page_size: pageSize,
+    PageSize: pageSize,
     ...(cursor ? { cursor } : {}),
   }
   
@@ -253,6 +254,7 @@ export async function fetchSettlements(
     request_time_ge: startTime,
     request_time_lt: endTime,
     page_size: 50,
+    PageSize: 50,
     ...(cursor ? { cursor } : {}),
   }
   
@@ -282,6 +284,7 @@ export async function fetchProducts(
 ): Promise<{ products: Record<string, unknown>[]; nextCursor?: string; total: number }> {
   const body: Record<string, unknown> = {
     page_size: pageSize,
+    PageSize: pageSize,
     ...(cursor ? { cursor } : {}),
   }
   
