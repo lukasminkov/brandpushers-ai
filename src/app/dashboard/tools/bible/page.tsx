@@ -32,6 +32,7 @@ interface DailyEntry {
   ad_spend: number
   ad_spend_pct: number
   postage_pick_pack: number
+  pick_pack: number
   key_changes: string | null
 }
 
@@ -335,7 +336,7 @@ export default function BiblePage() {
   const editableColKeys = useMemo(() => {
     const keys: string[] = ['gross_revenue', 'refunds', 'num_orders']
     products.forEach(p => keys.push(`units_${p.id}`))
-    keys.push('platform_fee', 'commissions', 'ad_spend', 'postage_pick_pack', 'key_changes')
+    keys.push('platform_fee', 'commissions', 'ad_spend', 'postage_pick_pack', 'pick_pack', 'key_changes')
     return keys
   }, [products])
 
@@ -521,7 +522,7 @@ export default function BiblePage() {
 
   const getProfit = (e: DailyEntry) => {
     const pc = getProductCost(e.id)
-    return e.gross_revenue - e.refunds - e.platform_fee - e.commissions - getAdSpend(e) - pc - e.postage_pick_pack
+    return e.gross_revenue - e.refunds - e.platform_fee - e.commissions - getAdSpend(e) - pc - e.postage_pick_pack - (e.pick_pack || 0)
   }
 
   const getAdSpendPct = (e: DailyEntry) =>
@@ -538,7 +539,7 @@ export default function BiblePage() {
     const t = {
       gross_revenue: 0, refunds: 0, num_orders: 0, total_units: 0,
       platform_fee: 0, commissions: 0, ad_spend: 0,
-      product_cost: 0, postage_pick_pack: 0, profit: 0,
+      product_cost: 0, postage_pick_pack: 0, pick_pack: 0, profit: 0,
     }
     entries.forEach(e => {
       t.gross_revenue += e.gross_revenue
@@ -550,6 +551,7 @@ export default function BiblePage() {
       t.ad_spend += getAdSpend(e)
       t.product_cost += getProductCost(e.id)
       t.postage_pick_pack += e.postage_pick_pack
+      t.pick_pack += (e.pick_pack || 0)
       t.profit += getProfit(e)
     })
     return t
@@ -588,31 +590,39 @@ export default function BiblePage() {
         {isEditing ? (
           <input
             ref={el => { if (el) cellRefs.current.set(cellKey(rowIdx, colKey), el) }}
-            type={isText ? 'text' : 'text'}
+            type="text"
             inputMode={isText ? 'text' : 'decimal'}
-            value={editValue}
-            onChange={e => setEditValue(e.target.value)}
+            defaultValue={editValue}
             onBlur={() => {
               if (isNavigating.current) return
-              commitEdit({ rowIdx, colKey }, editValue)
+              const input = cellRefs.current.get(cellKey(rowIdx, colKey))
+              const val = input?.value ?? ''
+              commitEdit({ rowIdx, colKey }, val)
               setEditingCell(null)
             }}
             onKeyDown={e => {
               if (e.key === 'Tab') {
                 e.preventDefault()
+                const input = cellRefs.current.get(cellKey(rowIdx, colKey))
+                setEditValue(input?.value ?? '')
                 navigateCell(rowIdx, colKey, e.shiftKey ? 'prev' : 'next')
               } else if (e.key === 'Enter') {
                 e.preventDefault()
+                const input = cellRefs.current.get(cellKey(rowIdx, colKey))
+                setEditValue(input?.value ?? '')
                 navigateCell(rowIdx, colKey, 'down')
               } else if (e.key === 'Escape') {
                 e.preventDefault()
-                setEditValue(preEditValue)
                 setEditingCell(null)
               } else if (e.key === 'ArrowDown' && !isText) {
                 e.preventDefault()
+                const input = cellRefs.current.get(cellKey(rowIdx, colKey))
+                setEditValue(input?.value ?? '')
                 navigateCell(rowIdx, colKey, 'down')
               } else if (e.key === 'ArrowUp' && !isText) {
                 e.preventDefault()
+                const input = cellRefs.current.get(cellKey(rowIdx, colKey))
+                setEditValue(input?.value ?? '')
                 navigateCell(rowIdx, colKey, 'up')
               }
             }}
@@ -667,29 +677,36 @@ export default function BiblePage() {
             ref={el => { if (el) cellRefs.current.set(cellKey(rowIdx, colKey), el) }}
             type="text"
             inputMode="numeric"
-            value={editValue}
-            onChange={e => setEditValue(e.target.value)}
+            defaultValue={editValue}
             onBlur={() => {
               if (isNavigating.current) return
-              commitEdit({ rowIdx, colKey }, editValue)
+              const input = cellRefs.current.get(cellKey(rowIdx, colKey))
+              commitEdit({ rowIdx, colKey }, input?.value ?? '')
               setEditingCell(null)
             }}
             onKeyDown={e => {
               if (e.key === 'Tab') {
                 e.preventDefault()
+                const input = cellRefs.current.get(cellKey(rowIdx, colKey))
+                setEditValue(input?.value ?? '')
                 navigateCell(rowIdx, colKey, e.shiftKey ? 'prev' : 'next')
               } else if (e.key === 'Enter') {
                 e.preventDefault()
+                const input = cellRefs.current.get(cellKey(rowIdx, colKey))
+                setEditValue(input?.value ?? '')
                 navigateCell(rowIdx, colKey, 'down')
               } else if (e.key === 'Escape') {
                 e.preventDefault()
-                setEditValue(preEditValue)
                 setEditingCell(null)
               } else if (e.key === 'ArrowDown') {
                 e.preventDefault()
+                const input = cellRefs.current.get(cellKey(rowIdx, colKey))
+                setEditValue(input?.value ?? '')
                 navigateCell(rowIdx, colKey, 'down')
               } else if (e.key === 'ArrowUp') {
                 e.preventDefault()
+                const input = cellRefs.current.get(cellKey(rowIdx, colKey))
+                setEditValue(input?.value ?? '')
                 navigateCell(rowIdx, colKey, 'up')
               }
             }}
@@ -806,7 +823,6 @@ export default function BiblePage() {
                   <Legend wrapperStyle={{ fontSize: 12, color: '#9ca3af' }} />
                   <Area type="monotone" dataKey="Gross Revenue" stroke="#9B0EE5" fill="url(#gRev)" strokeWidth={2} />
                   <Area type="monotone" dataKey="Net Profit" stroke="#22c55e" fill="url(#gProfit)" strokeWidth={2} />
-                  <Area type="monotone" dataKey="Ad Spend" stroke="#F57B18" fill="url(#gAd)" strokeWidth={2} />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -854,12 +870,13 @@ export default function BiblePage() {
                       </th>
                     ))}
                     <th className="px-3 py-3 text-right font-medium whitespace-nowrap">Total Units</th>
-                    <th className="px-3 py-3 text-right font-medium whitespace-nowrap">Platform Fee</th>
+                    <th className="px-3 py-3 text-right font-medium whitespace-nowrap">Platform Fee <span className="text-[10px] text-gray-500 font-normal">({getPlatformFee(settings, platform)}%)</span></th>
                     <th className="px-3 py-3 text-right font-medium">Commissions</th>
                     <th className="px-3 py-3 text-right font-medium whitespace-nowrap">Ad Spend</th>
                     <th className="px-3 py-3 text-right font-medium whitespace-nowrap">Ad %</th>
                     <th className="px-3 py-3 text-right font-medium whitespace-nowrap">Product Cost</th>
-                    <th className="px-3 py-3 text-right font-medium whitespace-nowrap">Postage+P&P</th>
+                    <th className="px-3 py-3 text-right font-medium whitespace-nowrap">Postage</th>
+                    <th className="px-3 py-3 text-right font-medium whitespace-nowrap">Pick & Pack</th>
                     <th className="px-3 py-3 text-right font-medium whitespace-nowrap">P/L</th>
                     <th className="px-3 py-3 text-right font-medium whitespace-nowrap">P/L %</th>
                     <th className="px-3 py-3 text-left font-medium whitespace-nowrap">Key Changes</th>
@@ -900,6 +917,7 @@ export default function BiblePage() {
                             <CalcCell value={fmtPct(getAdSpendPct(e))} />
                             <CalcCell value={getProductCost(e.id)} prefix="€" />
                             <EditableCell rowIdx={rowIdx} colKey="postage_pick_pack" value={e.postage_pick_pack} />
+                            <EditableCell rowIdx={rowIdx} colKey="pick_pack" value={e.pick_pack || 0} />
                             <td className={`px-3 py-2 text-sm text-right border-r border-white/[0.04] bg-white/[0.015] font-bold tabular-nums ${profitColor}`}>
                               {profit === 0 ? '—' : `€${fmt(profit)}`}
                             </td>
@@ -930,6 +948,7 @@ export default function BiblePage() {
                         </td>
                         <td className="px-3 py-3 text-sm text-right tabular-nums text-gray-400 bg-white/[0.015]">€{fmt(totals.product_cost)}</td>
                         <td className="px-3 py-3 text-sm text-right tabular-nums text-white">€{fmt(totals.postage_pick_pack)}</td>
+                        <td className="px-3 py-3 text-sm text-right tabular-nums text-white">€{fmt(totals.pick_pack)}</td>
                         <td className={`px-3 py-3 text-sm text-right tabular-nums font-bold bg-white/[0.015] ${totals.profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                           €{fmt(totals.profit)}
                         </td>
