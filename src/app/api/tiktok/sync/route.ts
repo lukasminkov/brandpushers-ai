@@ -7,8 +7,22 @@ import {
   fetchAffiliateOrders,
   fetchSettlements,
   fetchProducts,
+  fetchProductDetail,
   getAuthorizedShops,
 } from '@/lib/tiktok/client'
+
+// Extract variant name from TikTok SKU sales_attributes
+function getVariantName(sku: Record<string, unknown>): string {
+  const attrs = (sku.sales_attributes || []) as { value_name?: string; name?: string }[]
+  if (attrs.length > 0) {
+    return attrs.map(a => a.value_name || a.name || '').filter(Boolean).join(' / ') || 
+           (sku.seller_sku as string) || 'Default'
+  }
+  // Fallback: clean up seller_sku
+  const sellerSku = (sku.seller_sku as string) || 'Default'
+  const cleaned = sellerSku.replace(/\d+$/, '')
+  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1).toLowerCase()
+}
 
 function getServiceClient() {
   return createClient(
@@ -243,29 +257,38 @@ export async function POST(request: NextRequest) {
                 .eq('user_id', user.id)
                 .eq('product_id', product.id as string)
 
-              // Create variant entries for each SKU
-              const skus = (product.skus || []) as { id?: string; name?: string; seller_sku?: string }[]
-              for (const sku of skus) {
-                await supabase.from('bible_product_variants').upsert({
-                  bible_product_id: bibleProduct.id,
-                  sku_id: sku.id || null,
-                  sku_name: sku.name || sku.seller_sku || 'Default',
-                  cogs: 0,
-                  seller_sku: sku.seller_sku || null,
-                }, { onConflict: 'bible_product_id,sku_id' })
+              // Fetch full product details for variant names
+              try {
+                const detail = await fetchProductDetail(accessToken, shopCipher, product.id as string)
+                const detailSkus = (detail.skus || []) as Record<string, unknown>[]
+                for (const sku of detailSkus) {
+                  await supabase.from('bible_product_variants').upsert({
+                    bible_product_id: bibleProduct.id,
+                    sku_id: (sku.id as string) || null,
+                    sku_name: getVariantName(sku),
+                    cogs: 0,
+                    seller_sku: (sku.seller_sku as string) || null,
+                  }, { onConflict: 'bible_product_id,sku_id' })
+                }
+              } catch (detailErr) {
+                console.warn('Could not fetch product details for variants:', detailErr)
               }
             }
-          } else {
+          } else if (existing?.bible_product_id) {
             // Sync variants for existing bible products too
-            const bibleProductId = existing.bible_product_id
-            const skus = (product.skus || []) as { id?: string; name?: string; seller_sku?: string }[]
-            for (const sku of skus) {
-              await supabase.from('bible_product_variants').upsert({
-                bible_product_id: bibleProductId,
-                sku_id: sku.id || null,
-                sku_name: sku.name || sku.seller_sku || 'Default',
-                seller_sku: sku.seller_sku || null,
-              }, { onConflict: 'bible_product_id,sku_id' })
+            try {
+              const detail = await fetchProductDetail(accessToken, shopCipher, product.id as string)
+              const detailSkus = (detail.skus || []) as Record<string, unknown>[]
+              for (const sku of detailSkus) {
+                await supabase.from('bible_product_variants').upsert({
+                  bible_product_id: existing.bible_product_id,
+                  sku_id: (sku.id as string) || null,
+                  sku_name: getVariantName(sku),
+                  seller_sku: (sku.seller_sku as string) || null,
+                }, { onConflict: 'bible_product_id,sku_id' })
+              }
+            } catch (detailErr) {
+              console.warn('Could not fetch product details for variants:', detailErr)
             }
           }
         }

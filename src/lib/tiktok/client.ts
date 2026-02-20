@@ -314,7 +314,24 @@ export async function fetchProducts(
   
   return {
     products: (data.products || []) as Record<string, unknown>[],
-    nextCursor: data.next_cursor as string | undefined,
+    nextCursor: data.next_page_token as string | undefined,
     total: (data.total_count || 0) as number,
   }
+}
+
+/**
+ * Fetch full product details (includes SKU sales_attributes with variant names)
+ */
+export async function fetchProductDetail(
+  accessToken: string,
+  shopCipher: string,
+  productId: string
+): Promise<Record<string, unknown>> {
+  const data = await apiRequest(
+    `/product/202309/products/${productId}`,
+    'GET',
+    accessToken,
+    shopCipher
+  )
+  return data as Record<string, unknown>
 }
