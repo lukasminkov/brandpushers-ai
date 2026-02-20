@@ -6,15 +6,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
   
-  // Return all POSTGRES/DATABASE env vars so we can find the connection string
-  const envKeys = Object.keys(process.env).filter(k => 
-    k.includes('POSTGRES') || k.includes('DATABASE') || k.includes('SUPABASE') || k.includes('PG')
-  )
-  const envInfo: Record<string, string> = {}
-  for (const k of envKeys) {
-    // Mask passwords in URLs
-    envInfo[k] = process.env[k]?.substring(0, 80) + (process.env[k]!.length > 80 ? '...' : '')
-  }
+  // Dump ALL env vars to find any DB connection string
+  const allEnv = Object.entries(process.env)
+    .filter(([k]) => !k.startsWith('__') && !k.startsWith('npm_'))
+    .map(([k, v]) => [k, v?.substring(0, 100)])
   
-  return NextResponse.json({ envKeys: envInfo })
+  return NextResponse.json({ env: Object.fromEntries(allEnv) })
 }
