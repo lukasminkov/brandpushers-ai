@@ -46,12 +46,12 @@ export function generateSign(
   
   // Sort query params by key (exclude sign itself)
   const sortedParams = Object.keys(queryParams)
-    .filter(k => k !== 'sign')
+    .filter(k => k !== 'sign' && k !== 'access_token')
     .sort()
     .map(k => `${k}${queryParams[k]}`)
     .join('')
   
-  const baseString = path + sortedParams + (body || '')
+  const baseString = appSecret + path + sortedParams + (body || '') + appSecret
   
   return crypto
     .createHmac('sha256', appSecret)
@@ -75,12 +75,17 @@ export async function getAccessToken(authCode: string): Promise<TikTokTokens> {
   const appSecret = getAppSecret()
   
   const path = '/api/v2/token/get'
+  const timestamp = Math.floor(Date.now() / 1000).toString()
   const queryParams: Record<string, string> = {
     app_key: appKey,
     app_secret: appSecret,
     auth_code: authCode,
     grant_type: 'authorized_code',
+    timestamp,
   }
+  
+  const sign = generateSign(path, queryParams)
+  queryParams.sign = sign
   
   const url = new URL(path, TIKTOK_API_BASE)
   Object.entries(queryParams).forEach(([k, v]) => url.searchParams.set(k, v))
@@ -103,12 +108,17 @@ export async function refreshAccessToken(refreshToken: string): Promise<TikTokTo
   const appSecret = getAppSecret()
   
   const path = '/api/v2/token/refresh'
+  const timestamp = Math.floor(Date.now() / 1000).toString()
   const queryParams: Record<string, string> = {
     app_key: appKey,
     app_secret: appSecret,
     refresh_token: refreshToken,
     grant_type: 'refresh_token',
+    timestamp,
   }
+  
+  const sign = generateSign(path, queryParams)
+  queryParams.sign = sign
   
   const url = new URL(path, TIKTOK_API_BASE)
   Object.entries(queryParams).forEach(([k, v]) => url.searchParams.set(k, v))
