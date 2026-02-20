@@ -354,81 +354,27 @@ export default function BiblePage() {
     })
   }
 
-  // ── Auth + check TikTok connection ──
+  // ── Auth + check TikTok connection + resume sync if in progress ──
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user) {
         setUserId(user.id)
-        supabase.from('tiktok_connections').select('id, shop_name, last_sync_at').eq('user_id', user.id).limit(1).single()
-          .then(({ data }) => { if (data) setTiktokConnection(data as { id: string; shop_name: string | null; last_sync_at: string | null }) })
+        supabase.from('tiktok_connections').select('id, shop_name, last_sync_at, sync_status').eq('user_id', user.id).limit(1).single()
+          .then(({ data }) => {
+            if (data) {
+              setTiktokConnection(data as { id: string; shop_name: string | null; last_sync_at: string | null })
+              // Resume polling if sync is in progress
+              if (data.sync_status === 'syncing') {
+                setTiktokSyncing(true)
+                setTiktokSyncMsg('Syncing orders from TikTok…')
+              }
+            }
+          })
       }
     })
   }, [supabase])
 
-  const handleTikTokSync = async () => {
-    if (!tiktokConnection) return
-    setTiktokSyncing(true); setTiktokSyncMsg('Starting sync…')
-    try {
-      // Step 1: Fire-and-forget sync (returns immediately)
-      const syncRes = await fetch('/api/tiktok/sync', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ connectionId: tiktokConnection.id, syncType: 'all' }),
-      })
-      const syncData = await syncRes.json()
-      if (syncData.error) throw new Error(syncData.error)
-
-      // Step 2: Poll sync_status until complete, then populate Bible
-      setTiktokSyncMsg('Syncing orders from TikTok…')
-      const pollAndPopulate = async () => {
-        const { data } = await supabase
-          .from('tiktok_connections')
-          .select('sync_status, sync_error')
-          .eq('id', tiktokConnection.id)
-          .single()
-        if (!data) return
-        if (data.sync_status === 'error') {
-          setTiktokSyncMsg(`Error: ${data.sync_error || 'Sync failed'}`)
-          setTiktokSyncing(false)
-          setTimeout(() => setTiktokSyncMsg(null), 5000)
-          return
-        }
-        if (data.sync_status !== 'idle') {
-          // Show progress: count orders synced so far
-          const { count } = await supabase
-            .from('tiktok_orders')
-            .select('*', { count: 'exact', head: true })
-            .eq('connection_id', tiktokConnection.id)
-          setTiktokSyncMsg(`Syncing orders… ${count || 0} fetched`)
-          setTimeout(pollAndPopulate, 3000)
-          return
-        }
-        // Sync done — now populate Bible
-        setTiktokSyncMsg('Populating Bible entries…')
-        try {
-          const populateRes = await fetch('/api/tiktok/bible-populate', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ connectionId: tiktokConnection.id, startDate, endDate, platformFeePercent: settings.tiktok_shop_fee }),
-          })
-          const popData = await populateRes.json()
-          if (!popData.success) throw new Error(popData.error || 'Populate failed')
-          setTiktokSyncMsg(`Synced ${popData.daysUpdated || 0} days from TikTok`)
-          loadData()
-        } catch (err) {
-          setTiktokSyncMsg(`Error: ${err instanceof Error ? err.message : 'Unknown'}`)
-        } finally {
-          setTiktokSyncing(false)
-          setTimeout(() => setTiktokSyncMsg(null), 5000)
-        }
-      }
-      setTimeout(pollAndPopulate, 2000)
-    } catch (err) {
-      setTiktokSyncMsg(`Error: ${err instanceof Error ? err.message : 'Unknown'}`)
-      setTiktokSyncing(false)
-      setTimeout(() => setTiktokSyncMsg(null), 5000)
-    }
-  }
-
-  // ── Date range calc ──
+  // ── Date range calc (moved up so poll can reference it) ──
   const { startDate, endDate } = useMemo(() => {
     const now = new Date()
     let s: Date, e: Date = now
@@ -438,6 +384,78 @@ export default function BiblePage() {
     else { s = customFrom ? new Date(customFrom) : new Date(now.getFullYear(), now.getMonth(), 1); e = customTo ? new Date(customTo) : now }
     return { startDate: s.toISOString().slice(0, 10), endDate: e.toISOString().slice(0, 10) }
   }, [dateRange, customFrom, customTo])
+
+  // Poll sync progress — works for both new syncs and resumed syncs after page refresh
+  const pollSyncProgress = useCallback(async () => {
+    if (!tiktokConnection) return
+    const { data } = await supabase
+      .from('tiktok_connections')
+      .select('sync_status, sync_error')
+      .eq('id', tiktokConnection.id)
+      .single()
+    if (!data) return
+    if (data.sync_status === 'error') {
+      setTiktokSyncMsg(`Error: ${data.sync_error || 'Sync failed'}`)
+      setTiktokSyncing(false)
+      setTimeout(() => setTiktokSyncMsg(null), 5000)
+      return
+    }
+    if (data.sync_status !== 'idle') {
+      const { count } = await supabase
+        .from('tiktok_orders')
+        .select('*', { count: 'exact', head: true })
+        .eq('connection_id', tiktokConnection.id)
+      setTiktokSyncMsg(`Syncing orders… ${(count || 0).toLocaleString()} fetched`)
+      setTimeout(pollSyncProgress, 3000)
+      return
+    }
+    // Sync done — now populate Bible
+    setTiktokSyncMsg('Populating Bible entries…')
+    try {
+      const populateRes = await fetch('/api/tiktok/bible-populate', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ connectionId: tiktokConnection.id, startDate, endDate, platformFeePercent: settings.tiktok_shop_fee }),
+      })
+      const popData = await populateRes.json()
+      if (!popData.success) throw new Error(popData.error || 'Populate failed')
+      setTiktokSyncMsg(`✓ Synced ${popData.daysUpdated || 0} days from TikTok`)
+      loadData()
+    } catch (err) {
+      setTiktokSyncMsg(`Error: ${err instanceof Error ? err.message : 'Unknown'}`)
+    } finally {
+      setTiktokSyncing(false)
+      setTimeout(() => setTiktokSyncMsg(null), 8000)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tiktokConnection, supabase, startDate, endDate])
+
+  // Start polling when tiktokSyncing becomes true (from button OR page load resume)
+  useEffect(() => {
+    if (tiktokSyncing && tiktokConnection) {
+      pollSyncProgress()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tiktokSyncing, tiktokConnection])
+
+  const handleTikTokSync = async () => {
+    if (!tiktokConnection) return
+    setTiktokSyncing(true); setTiktokSyncMsg('Starting sync…')
+    try {
+      const syncRes = await fetch('/api/tiktok/sync', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ connectionId: tiktokConnection.id, syncType: 'all' }),
+      })
+      const syncData = await syncRes.json()
+      if (syncData.error) throw new Error(syncData.error)
+      // Polling is started by the useEffect above
+    } catch (err) {
+      setTiktokSyncMsg(`Error: ${err instanceof Error ? err.message : 'Unknown'}`)
+      setTiktokSyncing(false)
+      setTimeout(() => setTiktokSyncMsg(null), 5000)
+    }
+  }
+
+  // (date range calc moved above pollSyncProgress)
 
   // ── Load data ──
   const loadData = useCallback(async () => {
