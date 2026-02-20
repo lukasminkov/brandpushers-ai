@@ -24,6 +24,7 @@ export async function GET() {
     return NextResponse.json({ url: authUrl })
   } catch (err) {
     console.error('TikTok auth error:', err)
-    return NextResponse.json({ error: 'Failed to generate auth URL' }, { status: 500 })
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    return NextResponse.json({ error: 'Failed to generate auth URL', detail: message }, { status: 500 })
   }
 }
