@@ -203,9 +203,9 @@ export default function CalculatorPage() {
   const [ttOpenCollab, setTtOpenCollab] = useState(15)
   const [ttTargetCollab, setTtTargetCollab] = useState(20)
   const [ttAdsCommission, setTtAdsCommission] = useState(10)
-  const [ttMixAds, setTtMixAds] = useState(60)
-  const [ttMixOpen, setTtMixOpen] = useState(25)
-  const [ttMixTarget, setTtMixTarget] = useState(15)
+  const [ttMixAds, setTtMixAds] = useState(70)
+  const [ttMixOpen, setTtMixOpen] = useState(20)
+  const [ttMixTarget, setTtMixTarget] = useState(10)
   const [ttTargetRoas, setTtTargetRoas] = useState(3)
 
   // ── Amazon inputs ────────────────────────────────────────────
