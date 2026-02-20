@@ -855,27 +855,27 @@ export default function BiblePage() {
               <table className="w-full text-white">
                 <thead>
                   <tr className="text-[11px] text-gray-400 uppercase tracking-wider" style={{ background: 'rgba(255,255,255,0.04)' }}>
-                    <th className="px-3 py-3 text-left font-medium sticky left-0 z-10 whitespace-nowrap" style={{ background: '#1a1a1a' }}>Date</th>
-                    <th className="px-3 py-3 text-right font-medium whitespace-nowrap">Gross Revenue</th>
-                    <th className="px-3 py-3 text-right font-medium">Refunds</th>
-                    <th className="px-3 py-3 text-right font-medium whitespace-nowrap"># Orders</th>
+                    <th className="px-3 py-3 text-left font-medium align-bottom sticky left-0 z-10 whitespace-nowrap" style={{ background: '#1a1a1a' }}>Date</th>
+                    <th className="px-3 py-3 text-right font-medium align-bottom whitespace-nowrap">Gross Revenue</th>
+                    <th className="px-3 py-3 text-right font-medium align-bottom">Refunds</th>
+                    <th className="px-3 py-3 text-right font-medium align-bottom whitespace-nowrap"># Orders</th>
                     {products.map(p => (
-                      <th key={p.id} className="px-3 py-3 text-right font-medium whitespace-nowrap">
-                        <span className="text-gray-400">{p.name}</span>
-                        <span className="block text-[9px] text-gray-600 font-normal normal-case">units</span>
+                      <th key={p.id} className="px-3 pt-2 pb-1 text-right font-medium whitespace-nowrap align-bottom">
+                        <span className="block text-xs uppercase tracking-wider">{p.name}</span>
+                        <span className="block text-[9px] text-gray-600 font-normal normal-case leading-tight">units</span>
                       </th>
                     ))}
-                    <th className="px-3 py-3 text-right font-medium whitespace-nowrap">Total Units</th>
-                    <th className="px-3 py-3 text-right font-medium whitespace-nowrap">Platform Fee <span className="text-[10px] text-gray-500 font-normal">({getPlatformFee(settings, platform)}%)</span></th>
-                    <th className="px-3 py-3 text-right font-medium">Commissions</th>
-                    <th className="px-3 py-3 text-right font-medium whitespace-nowrap">Ad Spend</th>
-                    <th className="px-3 py-3 text-right font-medium whitespace-nowrap">Ad %</th>
-                    <th className="px-3 py-3 text-right font-medium whitespace-nowrap">Product Cost</th>
-                    <th className="px-3 py-3 text-right font-medium whitespace-nowrap">Postage</th>
-                    <th className="px-3 py-3 text-right font-medium whitespace-nowrap">Pick & Pack</th>
-                    <th className="px-3 py-3 text-right font-medium whitespace-nowrap">P/L</th>
-                    <th className="px-3 py-3 text-right font-medium whitespace-nowrap">P/L %</th>
-                    <th className="px-3 py-3 text-left font-medium whitespace-nowrap">Key Changes</th>
+                    <th className="px-3 py-3 text-right font-medium align-bottom whitespace-nowrap">Total Units</th>
+                    <th className="px-3 py-3 text-right font-medium align-bottom whitespace-nowrap">Platform Fee <span className="text-[10px] text-gray-500 font-normal">({getPlatformFee(settings, platform)}%)</span></th>
+                    <th className="px-3 py-3 text-right font-medium align-bottom">Commissions</th>
+                    <th className="px-3 py-3 text-right font-medium align-bottom whitespace-nowrap">Ad Spend</th>
+                    <th className="px-3 py-3 text-right font-medium align-bottom whitespace-nowrap">Ad %</th>
+                    <th className="px-3 py-3 text-right font-medium align-bottom whitespace-nowrap">Product Cost</th>
+                    <th className="px-3 py-3 text-right font-medium align-bottom whitespace-nowrap">Postage</th>
+                    <th className="px-3 py-3 text-right font-medium align-bottom whitespace-nowrap">Pick & Pack</th>
+                    <th className="px-3 py-3 text-right font-medium align-bottom whitespace-nowrap">P/L</th>
+                    <th className="px-3 py-3 text-right font-medium align-bottom whitespace-nowrap">P/L %</th>
+                    <th className="px-3 py-3 text-left font-medium align-bottom whitespace-nowrap">Key Changes</th>
                   </tr>
                 </thead>
                 <tbody>
