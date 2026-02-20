@@ -7,6 +7,7 @@ import {
   fetchAffiliateOrders,
   fetchSettlements,
   fetchProducts,
+  getAuthorizedShops,
 } from '@/lib/tiktok/client'
 
 function getServiceClient() {
@@ -42,7 +43,26 @@ export async function POST(request: NextRequest) {
 
     try {
       const { accessToken, connection } = await getValidToken(connectionId)
-      const shopCipher = connection.shop_cipher
+      let shopCipher = connection.shop_cipher
+
+      // If shop_cipher is missing, try to fetch it now
+      if (!shopCipher) {
+        const shops = await getAuthorizedShops(accessToken)
+        if (shops.length > 0) {
+          shopCipher = shops[0].cipher
+          await supabase
+            .from('tiktok_connections')
+            .update({
+              shop_cipher: shops[0].cipher,
+              shop_id: shops[0].id,
+              shop_name: shops[0].name,
+              region: shops[0].region,
+            })
+            .eq('id', connectionId)
+        } else {
+          throw new Error('No authorized shops found. Please reconnect your TikTok Shop.')
+        }
+      }
 
       // Default: last 30 days
       const end = endDate ? new Date(endDate) : new Date()
