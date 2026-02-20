@@ -309,7 +309,7 @@ export async function fetchProducts(
     accessToken,
     shopCipher,
     queryExtra,
-    {} // empty body, no filters
+    { status: 'ACTIVATE' } // only sync live products
   )
   
   return {
