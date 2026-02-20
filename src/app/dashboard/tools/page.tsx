@@ -20,6 +20,7 @@ interface Tool {
 // Internal tool routes - tools with these names route internally instead of external links
 const INTERNAL_TOOLS: Record<string, string> = {
   'The Bible': '/dashboard/tools/bible',
+  'Profit Calculator': '/dashboard/tools/calculator',
 }
 
 export default function MemberToolsPage() {
