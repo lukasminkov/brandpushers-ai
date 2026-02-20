@@ -211,7 +211,7 @@ export async function fetchOrders(
   
   return {
     orders: (data.orders || []) as Record<string, unknown>[],
-    nextCursor: data.next_cursor as string | undefined,
+    nextCursor: (data.next_page_token || data.next_cursor) as string | undefined,
     total: (data.total_count || 0) as number,
   }
 }
