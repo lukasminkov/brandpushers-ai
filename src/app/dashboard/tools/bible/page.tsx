@@ -3,8 +3,9 @@ import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import {
   Plus, X, Trash2, Edit3, ChevronLeft, ChevronRight,
-  Package, Settings,
+  Package, Settings, RefreshCw, Loader2, CheckCircle, Plug,
 } from 'lucide-react'
+import Link from 'next/link'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Legend
@@ -386,6 +387,11 @@ export default function BiblePage() {
   const [showSettings, setShowSettings] = useState(false)
   const [settings, setSettings] = useState<BibleSettings>(DEFAULT_SETTINGS)
 
+  // TikTok connection state (account-level, read from integrations)
+  const [tiktokConnection, setTiktokConnection] = useState<{ id: string; shop_name: string | null; last_sync_at: string | null } | null>(null)
+  const [tiktokSyncing, setTiktokSyncing] = useState(false)
+  const [tiktokSyncMsg, setTiktokSyncMsg] = useState<string | null>(null)
+
   // Spreadsheet editing state — floating editor approach
   const [editingCell, setEditingCell] = useState<CellAddr | null>(null)
   const [editValue, setEditValue] = useState('')
@@ -403,12 +409,69 @@ export default function BiblePage() {
     setShowSettings(false)
   }
 
-  // ── Auth ──
+  // ── Auth + check TikTok connection ──
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user) setUserId(user.id)
+      if (user) {
+        setUserId(user.id)
+        // Check for TikTok connection (account-level)
+        supabase
+          .from('tiktok_connections')
+          .select('id, shop_name, last_sync_at')
+          .eq('user_id', user.id)
+          .limit(1)
+          .single()
+          .then(({ data }) => {
+            if (data) setTiktokConnection(data as { id: string; shop_name: string | null; last_sync_at: string | null })
+          })
+      }
     })
   }, [supabase])
+
+  // Sync Bible entries from TikTok order data
+  const handleTikTokSync = async () => {
+    if (!tiktokConnection) return
+    setTiktokSyncing(true)
+    setTiktokSyncMsg(null)
+    try {
+      // First trigger a data sync
+      const syncRes = await fetch('/api/tiktok/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          connectionId: tiktokConnection.id,
+          syncType: 'all',
+          startDate,
+          endDate,
+        }),
+      })
+      const syncData = await syncRes.json()
+      if (!syncData.success) throw new Error(syncData.error || 'Sync failed')
+
+      // Then populate Bible entries from synced TikTok orders
+      const populateRes = await fetch('/api/tiktok/bible-populate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          connectionId: tiktokConnection.id,
+          startDate,
+          endDate,
+          platformFeePercent: settings.tiktok_shop_fee,
+        }),
+      })
+      const popData = await populateRes.json()
+      if (!popData.success) throw new Error(popData.error || 'Populate failed')
+
+      setTiktokSyncMsg(`Synced ${popData.daysUpdated || 0} days from TikTok`)
+      // Reload data
+      loadData()
+    } catch (err) {
+      setTiktokSyncMsg(`Error: ${err instanceof Error ? err.message : 'Unknown'}`)
+    } finally {
+      setTiktokSyncing(false)
+      setTimeout(() => setTiktokSyncMsg(null), 5000)
+    }
+  }
 
   // ── Date range calc ──
   const { startDate, endDate } = useMemo(() => {
@@ -791,6 +854,28 @@ export default function BiblePage() {
                 className="bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white" />
             </div>
           )}
+          {/* TikTok Sync button — only on TikTok tab when connected */}
+          {platform === 'tiktok_shop' && tiktokConnection && (
+            <button
+              onClick={handleTikTokSync}
+              disabled={tiktokSyncing}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ml-1 disabled:opacity-50"
+              style={{ background: 'rgba(242,72,34,0.12)', border: '1px solid rgba(242,72,34,0.2)', color: '#F24822' }}
+              title={`Sync from ${tiktokConnection.shop_name || 'TikTok Shop'}`}
+            >
+              {tiktokSyncing ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+              Sync TikTok
+            </button>
+          )}
+          {platform === 'tiktok_shop' && !tiktokConnection && !loading && (
+            <Link
+              href="/dashboard/integrations"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-gray-500 hover:text-gray-300 bg-white/5 border border-white/10 hover:border-white/20 transition ml-1"
+            >
+              <Plug size={12} />
+              Connect TikTok
+            </Link>
+          )}
           <button
             onClick={() => setShowSettings(true)}
             className="p-2 rounded-lg bg-white/5 border border-white/10 text-gray-400 hover:text-white hover:border-white/20 transition ml-1"
@@ -799,6 +884,13 @@ export default function BiblePage() {
             <Settings size={14} />
           </button>
         </div>
+        {/* Sync status message */}
+        {tiktokSyncMsg && (
+          <div className={`flex items-center gap-1.5 text-xs mt-1 ${tiktokSyncMsg.startsWith('Error') ? 'text-red-400' : 'text-green-400'}`}>
+            {tiktokSyncMsg.startsWith('Error') ? null : <CheckCircle size={12} />}
+            {tiktokSyncMsg}
+          </div>
+        )}
       </div>
 
       {/* Platform tabs */}

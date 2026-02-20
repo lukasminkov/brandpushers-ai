@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
-import { LayoutDashboard, FileText, Wrench, LogOut, Bell, Settings, Menu, X } from 'lucide-react'
+import { LayoutDashboard, FileText, Wrench, LogOut, Bell, Settings, Menu, X, Plug } from 'lucide-react'
 import OnboardingWizard from '@/components/onboarding/OnboardingWizard'
 import NotificationsPanel from '@/components/dashboard/NotificationsPanel'
 import SettingsModal from '@/components/dashboard/SettingsModal'
@@ -124,6 +124,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         })}
       </nav>
       <div className="p-3 space-y-1.5 border-t" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+        {(() => {
+          const intActive = pathname === '/dashboard/integrations' || pathname.startsWith('/dashboard/integrations')
+          return (
+            <Link href="/dashboard/integrations"
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 cursor-pointer focus-ring ${intActive ? 'text-white' : 'text-gray-500 hover:text-gray-200 hover:bg-white/5'}`}
+              style={intActive ? { background: 'rgba(242,72,34,0.12)', border: '1px solid rgba(242,72,34,0.2)' } : {}}
+            >
+              <Plug size={15} style={intActive ? { color: '#F24822' } : {}} />
+              <span>Integrations</span>
+            </Link>
+          )
+        })()}
         <button onClick={() => setNotificationsOpen(true)} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-500 hover:text-gray-200 hover:bg-white/5 transition-all duration-200 cursor-pointer">
           <Bell size={15} />
           <span className="flex-1 text-left">Notifications</span>
