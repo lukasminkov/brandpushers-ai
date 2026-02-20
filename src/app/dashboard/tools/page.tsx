@@ -77,7 +77,8 @@ export default function MemberToolsPage() {
             <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">{cat}</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {items.map(t => {
-                const internalRoute = INTERNAL_TOOLS[t.name] || (t.link?.startsWith('/dashboard/tools/') ? t.link : null)
+                const normalizedLink = t.link?.startsWith('/') ? t.link : t.link ? `/dashboard/tools/${t.link}` : null
+                const internalRoute = INTERNAL_TOOLS[t.name] || (normalizedLink?.startsWith('/dashboard/tools/') ? normalizedLink : null)
                 const handleClick = internalRoute
                   ? (e: React.MouseEvent) => { e.preventDefault(); router.push(internalRoute) }
                   : undefined
@@ -120,7 +121,7 @@ export default function MemberToolsPage() {
                   <div className="p-4">
                     <div className="flex items-center justify-between gap-2">
                       <h3 className="text-white font-semibold text-sm truncate">{t.name}</h3>
-                      {t.link && <ExternalLink size={12} className="text-gray-600 group-hover:text-gray-400 transition shrink-0" />}
+                      {t.link && !internalRoute && <ExternalLink size={12} className="text-gray-600 group-hover:text-gray-400 transition shrink-0" />}
                     </div>
                     {t.description && <p className="text-gray-500 text-xs mt-1.5 line-clamp-2">{t.description}</p>}
                   </div>
