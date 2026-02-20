@@ -93,6 +93,57 @@ const getPlatformFee = (settings: BibleSettings, platform: Platform) => {
   return settings.shopify_fee
 }
 
+// ── Inline Input (stable component — never remounts while typing) ──
+function InlineInput({ initialValue, onCommit, onNav, isText = false }: {
+  initialValue: string
+  onCommit: (val: string) => void
+  onNav: (dir: 'next' | 'prev' | 'down' | 'up' | 'cancel') => void
+  isText?: boolean
+}) {
+  const ref = useRef<HTMLInputElement>(null)
+  const committed = useRef(false)
+
+  useEffect(() => {
+    const el = ref.current
+    if (el) { el.focus(); el.select() }
+  }, [])
+
+  const commit = useCallback(() => {
+    if (committed.current) return
+    committed.current = true
+    onCommit(ref.current?.value ?? initialValue)
+  }, [onCommit, initialValue])
+
+  return (
+    <input
+      ref={ref}
+      type="text"
+      inputMode={isText ? 'text' : 'decimal'}
+      defaultValue={initialValue}
+      onBlur={() => { commit() }}
+      onKeyDown={e => {
+        if (e.key === 'Tab') {
+          e.preventDefault(); commit(); onNav(e.shiftKey ? 'prev' : 'next')
+        } else if (e.key === 'Enter') {
+          e.preventDefault(); commit(); onNav('down')
+        } else if (e.key === 'Escape') {
+          e.preventDefault(); committed.current = true; onNav('cancel')
+        } else if (!isText && e.key === 'ArrowDown') {
+          e.preventDefault(); commit(); onNav('down')
+        } else if (!isText && e.key === 'ArrowUp') {
+          e.preventDefault(); commit(); onNav('up')
+        }
+      }}
+      className={`
+        w-full bg-transparent text-white outline-none px-1 py-0.5 rounded transition-all
+        ring-2 ring-[#F24822]/60 ring-offset-1 ring-offset-[#141414]
+        ${isText ? 'text-left' : 'text-right'}
+        [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none
+      `}
+    />
+  )
+}
+
 // ── Calendar Picker ────────────────────────────────────────────────
 function CalendarPicker({ usedDates, onSelect, onClose }: {
   usedDates: Set<string>
@@ -587,48 +638,18 @@ export default function BiblePage() {
         onClick={() => { if (!isEditing) startEdit(rowIdx, colKey) }}
       >
         {isEditing ? (
-          <input
-            key={`${rowIdx}-${colKey}-${String(value)}`}
-            ref={el => { if (el) cellRefs.current.set(cellKey(rowIdx, colKey), el) }}
-            type="text"
-            inputMode={isText ? 'text' : 'decimal'}
-            defaultValue={editValue}
-            onBlur={() => {
-              if (isNavigating.current) return
-              const input = cellRefs.current.get(cellKey(rowIdx, colKey))
-              const val = input?.value ?? ''
+          <InlineInput
+            key={`${rowIdx}-${colKey}`}
+            initialValue={editValue}
+            isText={isText}
+            onCommit={(val) => {
               commitEdit({ rowIdx, colKey }, val)
               setEditingCell(null)
             }}
-            onKeyDown={e => {
-              const getVal = () => cellRefs.current.get(cellKey(rowIdx, colKey))?.value ?? ''
-              if (e.key === 'Tab') {
-                e.preventDefault()
-                setEditValue(getVal())
-                navigateCell(rowIdx, colKey, e.shiftKey ? 'prev' : 'next')
-              } else if (e.key === 'Enter') {
-                e.preventDefault()
-                setEditValue(getVal())
-                navigateCell(rowIdx, colKey, 'down')
-              } else if (e.key === 'Escape') {
-                e.preventDefault()
-                setEditingCell(null)
-              } else if (e.key === 'ArrowDown' && !isText) {
-                e.preventDefault()
-                setEditValue(getVal())
-                navigateCell(rowIdx, colKey, 'down')
-              } else if (e.key === 'ArrowUp' && !isText) {
-                e.preventDefault()
-                setEditValue(getVal())
-                navigateCell(rowIdx, colKey, 'up')
-              }
+            onNav={(dir) => {
+              if (dir === 'cancel') { setEditingCell(null); return }
+              navigateCell(rowIdx, colKey, dir)
             }}
-            className={`
-              w-full bg-transparent text-white outline-none px-1 py-0.5 rounded transition-all
-              ring-2 ring-[#F24822]/60 ring-offset-1 ring-offset-[#141414]
-              ${isText ? 'text-left' : 'text-right'}
-              [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none
-            `}
           />
         ) : (
           <span className={`block tabular-nums ${typeof value === 'number' && value === 0 ? 'text-gray-600' : 'text-white'}`}>
@@ -669,42 +690,17 @@ export default function BiblePage() {
         onClick={() => { if (!isEditing) startEdit(rowIdx, colKey) }}
       >
         {isEditing ? (
-          <input
-            key={`${rowIdx}-${colKey}-${val}`}
-            ref={el => { if (el) cellRefs.current.set(cellKey(rowIdx, colKey), el) }}
-            type="text"
-            inputMode="numeric"
-            defaultValue={editValue}
-            onBlur={() => {
-              if (isNavigating.current) return
-              const input = cellRefs.current.get(cellKey(rowIdx, colKey))
-              commitEdit({ rowIdx, colKey }, input?.value ?? '')
+          <InlineInput
+            key={`${rowIdx}-${colKey}`}
+            initialValue={editValue}
+            onCommit={(v) => {
+              commitEdit({ rowIdx, colKey }, v)
               setEditingCell(null)
             }}
-            onKeyDown={e => {
-              const getVal = () => cellRefs.current.get(cellKey(rowIdx, colKey))?.value ?? ''
-              if (e.key === 'Tab') {
-                e.preventDefault()
-                setEditValue(getVal())
-                navigateCell(rowIdx, colKey, e.shiftKey ? 'prev' : 'next')
-              } else if (e.key === 'Enter') {
-                e.preventDefault()
-                setEditValue(getVal())
-                navigateCell(rowIdx, colKey, 'down')
-              } else if (e.key === 'Escape') {
-                e.preventDefault()
-                setEditingCell(null)
-              } else if (e.key === 'ArrowDown') {
-                e.preventDefault()
-                setEditValue(getVal())
-                navigateCell(rowIdx, colKey, 'down')
-              } else if (e.key === 'ArrowUp') {
-                e.preventDefault()
-                setEditValue(getVal())
-                navigateCell(rowIdx, colKey, 'up')
-              }
+            onNav={(dir) => {
+              if (dir === 'cancel') { setEditingCell(null); return }
+              navigateCell(rowIdx, colKey, dir)
             }}
-            className="w-full bg-transparent text-white text-right outline-none px-1 py-0.5 rounded ring-2 ring-[#F24822]/60 ring-offset-1 ring-offset-[#141414] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
           />
         ) : (
           <span className={`block tabular-nums ${val === 0 ? 'text-gray-600' : 'text-white'}`}>
