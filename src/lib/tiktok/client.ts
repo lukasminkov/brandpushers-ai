@@ -187,12 +187,17 @@ export async function fetchOrders(
   pageSize = 50,
   cursor?: string
 ): Promise<{ orders: Record<string, unknown>[]; nextCursor?: string; total: number }> {
+  // TikTok v2: page_size/sort go as query params, time filters go in body
+  const queryExtra: Record<string, string> = {
+    page_size: pageSize.toString(),
+    sort_order: 'DESC',
+    sort_field: 'create_time',
+    ...(cursor ? { page_token: cursor } : {}),
+  }
+  
   const body: Record<string, unknown> = {
     create_time_ge: startTime,
     create_time_lt: endTime,
-    page_size: pageSize,
-    PageSize: pageSize,
-    ...(cursor ? { cursor } : {}),
   }
   
   const data = await apiRequest(
@@ -200,7 +205,7 @@ export async function fetchOrders(
     'POST',
     accessToken,
     shopCipher,
-    undefined,
+    queryExtra,
     body
   )
   
@@ -250,12 +255,14 @@ export async function fetchSettlements(
   endTime: number,
   cursor?: string
 ): Promise<{ settlements: Record<string, unknown>[]; nextCursor?: string }> {
+  const queryExtra: Record<string, string> = {
+    page_size: '50',
+    ...(cursor ? { page_token: cursor } : {}),
+  }
+  
   const body: Record<string, unknown> = {
     request_time_ge: startTime,
     request_time_lt: endTime,
-    page_size: 50,
-    PageSize: 50,
-    ...(cursor ? { cursor } : {}),
   }
   
   const data = await apiRequest(
@@ -263,7 +270,7 @@ export async function fetchSettlements(
     'POST',
     accessToken,
     shopCipher,
-    undefined,
+    queryExtra,
     body
   )
   
@@ -282,10 +289,9 @@ export async function fetchProducts(
   pageSize = 50,
   cursor?: string
 ): Promise<{ products: Record<string, unknown>[]; nextCursor?: string; total: number }> {
-  const body: Record<string, unknown> = {
-    page_size: pageSize,
-    PageSize: pageSize,
-    ...(cursor ? { cursor } : {}),
+  const queryExtra: Record<string, string> = {
+    page_size: pageSize.toString(),
+    ...(cursor ? { page_token: cursor } : {}),
   }
   
   const data = await apiRequest(
@@ -293,8 +299,8 @@ export async function fetchProducts(
     'POST',
     accessToken,
     shopCipher,
-    undefined,
-    body
+    queryExtra,
+    {} // empty body, no filters
   )
   
   return {
