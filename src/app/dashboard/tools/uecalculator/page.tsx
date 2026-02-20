@@ -203,6 +203,9 @@ export default function CalculatorPage() {
   const [ttOpenCollab, setTtOpenCollab] = useState(15)
   const [ttTargetCollab, setTtTargetCollab] = useState(20)
   const [ttAdsCommission, setTtAdsCommission] = useState(10)
+  const [ttMixAds, setTtMixAds] = useState(60)
+  const [ttMixOpen, setTtMixOpen] = useState(25)
+  const [ttMixTarget, setTtMixTarget] = useState(15)
   const [ttTargetRoas, setTtTargetRoas] = useState(3)
 
   // ── Amazon inputs ────────────────────────────────────────────
@@ -234,7 +237,11 @@ export default function CalculatorPage() {
 
   // ── TikTok calculations ──────────────────────────────────────
   const ttCalc = useMemo(() => {
-    const blended = (ttOpenCollab + ttTargetCollab + ttAdsCommission) / 3
+    const totalMix = ttMixAds + ttMixOpen + ttMixTarget
+    const wAds = totalMix > 0 ? ttMixAds / totalMix : 1/3
+    const wOpen = totalMix > 0 ? ttMixOpen / totalMix : 1/3
+    const wTarget = totalMix > 0 ? ttMixTarget / totalMix : 1/3
+    const blended = wOpen * ttOpenCollab + wTarget * ttTargetCollab + wAds * ttAdsCommission
     const refundAmt = salesPrice * (refundPct / 100)
     const platformFeeAmt = salesPrice * (ttPlatformFee / 100)
     const affiliateAmt = salesPrice * (blended / 100)
@@ -247,7 +254,7 @@ export default function CalculatorPage() {
     const profitAtTarget = profit - adSpendAtTarget
     const marginAtTarget = salesPrice > 0 ? (profitAtTarget / salesPrice) * 100 : 0
     return { blended, refundAmt, platformFeeAmt, affiliateAmt, netRevenue, totalCosts, profit, margin, breakevenRoas, adSpendAtTarget, profitAtTarget, marginAtTarget }
-  }, [salesPrice, refundPct, ttPlatformFee, ttPostage, ttPickPack, ttOpenCollab, ttTargetCollab, ttAdsCommission, productCost, ttTargetRoas])
+  }, [salesPrice, refundPct, ttPlatformFee, ttPostage, ttPickPack, ttOpenCollab, ttTargetCollab, ttAdsCommission, ttMixAds, ttMixOpen, ttMixTarget, productCost, ttTargetRoas])
 
   // ── Amazon calculations ──────────────────────────────────────
   const amzCalc = useMemo(() => {
@@ -437,8 +444,36 @@ export default function CalculatorPage() {
                 <SliderInput label="Target Collab %" value={ttTargetCollab} onChange={setTtTargetCollab} max={50} step={0.5} />
                 <SliderInput label="Ads Commission %" value={ttAdsCommission} onChange={setTtAdsCommission} max={50} step={0.5} />
               </div>
+
+              {/* Channel Sales Mix */}
+              <div className="mt-5 pt-4 border-t border-white/[0.06]">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-xs font-semibold text-white">Channel Sales Mix</span>
+                  <span className="text-[10px] text-gray-500">What % of sales come from each channel?</span>
+                </div>
+                <div className="space-y-3">
+                  <SliderInput label={`GMV Max / Shop Ads — ${ttMixAds}%`} value={ttMixAds} onChange={v => { setTtMixAds(v); setTtMixOpen(Math.max(0, 100 - v - ttMixTarget)) }} min={0} max={100} step={1} suffix="%" />
+                  <SliderInput label={`Open Collab — ${ttMixOpen}%`} value={ttMixOpen} onChange={v => { setTtMixOpen(v); setTtMixAds(Math.max(0, 100 - v - ttMixTarget)) }} min={0} max={100} step={1} suffix="%" />
+                  <SliderInput label={`Target Collab — ${ttMixTarget}%`} value={ttMixTarget} onChange={v => { setTtMixTarget(v); setTtMixAds(Math.max(0, 100 - v - ttMixOpen)) }} min={0} max={100} step={1} suffix="%" />
+                </div>
+                {/* Visual bar */}
+                <div className="flex rounded-lg overflow-hidden h-2 mt-3">
+                  {ttMixAds > 0 && <div className="bg-[#F24822] transition-all" style={{ width: `${(ttMixAds / (ttMixAds + ttMixOpen + ttMixTarget || 1)) * 100}%` }} />}
+                  {ttMixOpen > 0 && <div className="bg-[#a855f7] transition-all" style={{ width: `${(ttMixOpen / (ttMixAds + ttMixOpen + ttMixTarget || 1)) * 100}%` }} />}
+                  {ttMixTarget > 0 && <div className="bg-[#06b6d4] transition-all" style={{ width: `${(ttMixTarget / (ttMixAds + ttMixOpen + ttMixTarget || 1)) * 100}%` }} />}
+                </div>
+                <div className="flex gap-3 mt-2">
+                  <span className="flex items-center gap-1 text-[10px] text-gray-500"><span className="w-2 h-2 rounded-full bg-[#F24822]" />Ads</span>
+                  <span className="flex items-center gap-1 text-[10px] text-gray-500"><span className="w-2 h-2 rounded-full bg-[#a855f7]" />Open</span>
+                  <span className="flex items-center gap-1 text-[10px] text-gray-500"><span className="w-2 h-2 rounded-full bg-[#06b6d4]" />Target</span>
+                </div>
+              </div>
+
               <div className="mt-4 flex items-center justify-between px-4 py-3 rounded-xl" style={{ background: 'rgba(155,14,229,0.1)', border: '1px solid rgba(155,14,229,0.2)' }}>
-                <span className="text-xs text-gray-300 font-medium">Blended Affiliate Rate</span>
+                <div>
+                  <span className="text-xs text-gray-300 font-medium">Blended Affiliate Rate</span>
+                  <span className="text-[10px] text-gray-500 ml-2">(weighted by sales mix)</span>
+                </div>
                 <span className="text-sm font-bold bg-gradient-to-r from-[#9B0EE5] to-[#F57B18] bg-clip-text text-transparent">
                   {ttCalc.blended.toFixed(1)}%
                 </span>
