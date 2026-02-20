@@ -689,44 +689,60 @@ export default function BiblePage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   , [entries, allUnits, products])
 
-  // ── Editable Cell ──
-  const renderEditableCell = (rowIdx: number, colKey: string, value: number | string, isText = false) => {
-    const isEditing = editingCell?.rowIdx === rowIdx && editingCell?.colKey === colKey
-    const displayVal = isText
-      ? (value || '—')
-      : (typeof value === 'number' ? (value === 0 ? '—' : fmt(value)) : value)
+  // ── Currency symbol ──
+  const cs = getCurrencySymbol(settings)
 
-    return (
-      <td
-        key={colKey}
-        className={`
-          px-3 py-2 text-sm border-r border-white/[0.04] cursor-pointer transition-colors duration-100
-          ${isText ? 'text-left' : 'text-right'}
-          ${isEditing ? '' : 'hover:bg-white/[0.04]'}
-        `}
-        onClick={() => { if (!isEditing) startEdit(rowIdx, colKey) }}
-      >
-        {isEditing ? (
-          <InlineInput
-            key={`${rowIdx}-${colKey}`}
-            initialValue={editValue}
-            isText={isText}
-            onCommit={(val) => {
-              commitEdit({ rowIdx, colKey }, val)
-              setEditingCell(null)
-            }}
-            onNav={(dir) => {
-              if (dir === 'cancel') { setEditingCell(null); return }
-              navigateCell(rowIdx, colKey, dir)
-            }}
-          />
-        ) : (
-          <span className={`block tabular-nums ${typeof value === 'number' && value === 0 ? 'text-gray-600' : 'text-white'}`}>
-            {displayVal}
-          </span>
-        )}
-      </td>
-    )
+  // ── Stable callback refs for InlineInput (prevents re-renders when callbacks change) ──
+  const commitEditRef = useRef(commitEdit)
+  commitEditRef.current = commitEdit
+  const navigateCellRef = useRef(navigateCell)
+  navigateCellRef.current = navigateCell
+  const startEditRef = useRef(startEdit)
+  startEditRef.current = startEdit
+  const editingCellRef = useRef(editingCell)
+  editingCellRef.current = editingCell
+  const editValueRef = useRef(editValue)
+  editValueRef.current = editValue
+
+  // Stable onCommit ref — commits the value and clears editing
+  const onCommitRef = useRef((val: string) => {
+    const ec = editingCellRef.current
+    if (ec) {
+      commitEditRef.current(ec, val)
+      setEditingCell(null)
+    }
+  })
+  onCommitRef.current = (val: string) => {
+    const ec = editingCellRef.current
+    if (ec) {
+      commitEditRef.current(ec, val)
+      setEditingCell(null)
+    }
+  }
+
+  // Stable onNav ref — navigates or cancels
+  const onNavRef = useRef((dir: 'next' | 'prev' | 'down' | 'up' | 'cancel') => {
+    const ec = editingCellRef.current
+    if (!ec) return
+    if (dir === 'cancel') { setEditingCell(null); return }
+    navigateCellRef.current(ec.rowIdx, ec.colKey, dir)
+  })
+  onNavRef.current = (dir: 'next' | 'prev' | 'down' | 'up' | 'cancel') => {
+    const ec = editingCellRef.current
+    if (!ec) return
+    if (dir === 'cancel') { setEditingCell(null); return }
+    navigateCellRef.current(ec.rowIdx, ec.colKey, dir)
+  }
+
+  // Stable click handler
+  const onClickEdit = useCallback((rowIdx: number, colKey: string) => {
+    startEditRef.current(rowIdx, colKey)
+  }, [])
+
+  // ── Helper: get display value for a cell ──
+  const getDisplayValue = (value: number | string, isText: boolean) => {
+    if (isText) return (value || '—') as string
+    return typeof value === 'number' ? (value === 0 ? '—' : fmt(value)) : String(value)
   }
 
   // ── Calculated cell (read-only) ──
@@ -739,43 +755,6 @@ export default function BiblePage() {
     return (
       <td className={`px-3 py-2 text-sm text-right border-r border-white/[0.04] bg-white/[0.015] tabular-nums ${color || 'text-gray-400'}`}>
         {display}
-      </td>
-    )
-  }
-
-  // ── Units cell (integer editable) ──
-  const renderUnitsCell = (rowIdx: number, productId: string, entryId: string) => {
-    const colKey = `units_${productId}`
-    const val = getUnitsForEntry(entryId, productId)
-    const isEditing = editingCell?.rowIdx === rowIdx && editingCell?.colKey === colKey
-
-    return (
-      <td
-        key={colKey}
-        className={`
-          px-3 py-2 text-sm text-right border-r border-white/[0.04] cursor-pointer transition-colors duration-100
-          ${isEditing ? '' : 'hover:bg-white/[0.04]'}
-        `}
-        onClick={() => { if (!isEditing) startEdit(rowIdx, colKey) }}
-      >
-        {isEditing ? (
-          <InlineInput
-            key={`${rowIdx}-${colKey}`}
-            initialValue={editValue}
-            onCommit={(v) => {
-              commitEdit({ rowIdx, colKey }, v)
-              setEditingCell(null)
-            }}
-            onNav={(dir) => {
-              if (dir === 'cancel') { setEditingCell(null); return }
-              navigateCell(rowIdx, colKey, dir)
-            }}
-          />
-        ) : (
-          <span className={`block tabular-nums ${val === 0 ? 'text-gray-600' : 'text-white'}`}>
-            {dashInt(val)}
-          </span>
-        )}
       </td>
     )
   }
@@ -872,11 +851,11 @@ export default function BiblePage() {
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
                   <XAxis dataKey="date" tick={{ fill: '#6b7280', fontSize: 11 }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fill: '#6b7280', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => `€${v >= 1000 ? (v/1000).toFixed(0)+'k' : v}`} />
+                  <YAxis tick={{ fill: '#6b7280', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => `${cs}${v >= 1000 ? (v/1000).toFixed(0)+'k' : v}`} />
                   <Tooltip
                     contentStyle={{ background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, fontSize: 12 }}
                     labelStyle={{ color: '#9ca3af' }}
-                    formatter={(v) => [`€${fmt(Number(v || 0))}`, undefined]}
+                    formatter={(v) => [`${cs}${fmt(Number(v || 0))}`, undefined]}
                   />
                   <Legend wrapperStyle={{ fontSize: 12, color: '#9ca3af' }} />
                   <Area type="monotone" dataKey="Gross Revenue" stroke="#9B0EE5" fill="url(#gRev)" strokeWidth={2} />
@@ -896,7 +875,7 @@ export default function BiblePage() {
               >
                 <Package size={14} className="text-gray-500" />
                 <span className="text-sm text-white font-medium">{p.name}</span>
-                <span className="text-xs text-gray-500">€{fmt(p.cogs)}/unit</span>
+                <span className="text-xs text-gray-500">{cs}{fmt(p.cogs)}/unit</span>
                 <button onClick={() => setEditProduct(p)} className="opacity-0 group-hover:opacity-100 transition text-gray-500 hover:text-white ml-1">
                   <Edit3 size={12} />
                 </button>
@@ -953,6 +932,7 @@ export default function BiblePage() {
                         const profit = getProfit(e)
                         const profitPct = getProfitPct(e)
                         const profitColor = profit >= 0 ? 'text-green-400' : 'text-red-400'
+                        const isEditingRow = editingCell?.rowIdx === rowIdx
                         return (
                           <tr
                             key={e.id}
@@ -962,25 +942,29 @@ export default function BiblePage() {
                             <td className="px-3 py-2 text-sm font-medium sticky left-0 z-10 whitespace-nowrap" style={{ background: '#141414' }}>
                               <span className="text-white">{fmtDate(e.date)}</span>
                             </td>
-                            {renderEditableCell(rowIdx, 'gross_revenue', e.gross_revenue)}
-                            {renderEditableCell(rowIdx, 'refunds', e.refunds)}
-                            {renderEditableCell(rowIdx, 'num_orders', e.num_orders)}
-                            {products.map(p => renderUnitsCell(rowIdx, p.id, e.id))}
+                            <EditableCell rowIdx={rowIdx} colKey="gross_revenue" displayValue={getDisplayValue(e.gross_revenue, false)} rawValue={e.gross_revenue} isEditing={isEditingRow && editingCell?.colKey === 'gross_revenue'} editValue={editValue} onClickEdit={onClickEdit} onCommitRef={onCommitRef} onNavRef={onNavRef} />
+                            <EditableCell rowIdx={rowIdx} colKey="refunds" displayValue={getDisplayValue(e.refunds, false)} rawValue={e.refunds} isEditing={isEditingRow && editingCell?.colKey === 'refunds'} editValue={editValue} onClickEdit={onClickEdit} onCommitRef={onCommitRef} onNavRef={onNavRef} />
+                            <EditableCell rowIdx={rowIdx} colKey="num_orders" displayValue={getDisplayValue(e.num_orders, false)} rawValue={e.num_orders} isEditing={isEditingRow && editingCell?.colKey === 'num_orders'} editValue={editValue} onClickEdit={onClickEdit} onCommitRef={onCommitRef} onNavRef={onNavRef} />
+                            {products.map(p => {
+                              const colKey = `units_${p.id}`
+                              const val = getUnitsForEntry(e.id, p.id)
+                              return <EditableCell key={colKey} rowIdx={rowIdx} colKey={colKey} displayValue={dashInt(val)} rawValue={val} isEditing={isEditingRow && editingCell?.colKey === colKey} editValue={editValue} onClickEdit={onClickEdit} onCommitRef={onCommitRef} onNavRef={onNavRef} />
+                            })}
                             <CalcCell value={getTotalUnits(e.id)} />
-                            {renderEditableCell(rowIdx, 'platform_fee', e.platform_fee)}
-                            {renderEditableCell(rowIdx, 'commissions', e.commissions)}
-                            {renderEditableCell(rowIdx, 'ad_spend', getAdSpend(e))}
+                            <CalcCell value={e.platform_fee} prefix={cs} />
+                            <EditableCell rowIdx={rowIdx} colKey="commissions" displayValue={getDisplayValue(e.commissions, false)} rawValue={e.commissions} isEditing={isEditingRow && editingCell?.colKey === 'commissions'} editValue={editValue} onClickEdit={onClickEdit} onCommitRef={onCommitRef} onNavRef={onNavRef} />
+                            <EditableCell rowIdx={rowIdx} colKey="ad_spend" displayValue={getDisplayValue(getAdSpend(e), false)} rawValue={getAdSpend(e)} isEditing={isEditingRow && editingCell?.colKey === 'ad_spend'} editValue={editValue} onClickEdit={onClickEdit} onCommitRef={onCommitRef} onNavRef={onNavRef} />
                             <CalcCell value={fmtPct(getAdSpendPct(e))} />
-                            <CalcCell value={getProductCost(e.id)} prefix="€" />
-                            {renderEditableCell(rowIdx, 'postage_pick_pack', e.postage_pick_pack)}
-                            {renderEditableCell(rowIdx, 'pick_pack', e.pick_pack || 0)}
+                            <CalcCell value={getProductCost(e.id)} prefix={cs} />
+                            <EditableCell rowIdx={rowIdx} colKey="postage_pick_pack" displayValue={getDisplayValue(e.postage_pick_pack, false)} rawValue={e.postage_pick_pack} isEditing={isEditingRow && editingCell?.colKey === 'postage_pick_pack'} editValue={editValue} onClickEdit={onClickEdit} onCommitRef={onCommitRef} onNavRef={onNavRef} />
+                            <EditableCell rowIdx={rowIdx} colKey="pick_pack" displayValue={getDisplayValue(e.pick_pack || 0, false)} rawValue={e.pick_pack || 0} isEditing={isEditingRow && editingCell?.colKey === 'pick_pack'} editValue={editValue} onClickEdit={onClickEdit} onCommitRef={onCommitRef} onNavRef={onNavRef} />
                             <td className={`px-3 py-2 text-sm text-right border-r border-white/[0.04] bg-white/[0.015] font-bold tabular-nums ${profitColor}`}>
-                              {profit === 0 ? '—' : `€${fmt(profit)}`}
+                              {profit === 0 ? '—' : `${cs}${fmt(profit)}`}
                             </td>
                             <td className={`px-3 py-2 text-sm text-right border-r border-white/[0.04] bg-white/[0.015] font-bold tabular-nums ${profitColor}`}>
                               {profit === 0 ? '—' : fmtPct(profitPct)}
                             </td>
-                            {renderEditableCell(rowIdx, 'key_changes', e.key_changes || '', true)}
+                            <EditableCell rowIdx={rowIdx} colKey="key_changes" displayValue={getDisplayValue(e.key_changes || '', true)} rawValue={e.key_changes || ''} isEditing={isEditingRow && editingCell?.colKey === 'key_changes'} editValue={editValue} isText onClickEdit={onClickEdit} onCommitRef={onCommitRef} onNavRef={onNavRef} />
                           </tr>
                         )
                       })}
@@ -988,25 +972,25 @@ export default function BiblePage() {
                       {/* Totals row */}
                       <tr className="border-t-2 border-white/[0.1] font-semibold" style={{ background: 'rgba(255,255,255,0.04)' }}>
                         <td className="px-3 py-3 text-sm sticky left-0 z-10 text-gray-300" style={{ background: '#1a1a1a' }}>TOTAL</td>
-                        <td className="px-3 py-3 text-sm text-right tabular-nums text-white">€{fmt(totals.gross_revenue)}</td>
-                        <td className="px-3 py-3 text-sm text-right tabular-nums text-white">€{fmt(totals.refunds)}</td>
+                        <td className="px-3 py-3 text-sm text-right tabular-nums text-white">{cs}{fmt(totals.gross_revenue)}</td>
+                        <td className="px-3 py-3 text-sm text-right tabular-nums text-white">{cs}{fmt(totals.refunds)}</td>
                         <td className="px-3 py-3 text-sm text-right tabular-nums text-white">{totals.num_orders}</td>
                         {products.map(p => {
                           const total = entries.reduce((s, e) => s + getUnitsForEntry(e.id, p.id), 0)
                           return <td key={p.id} className="px-3 py-3 text-sm text-right tabular-nums text-white">{total}</td>
                         })}
                         <td className="px-3 py-3 text-sm text-right tabular-nums text-gray-400 bg-white/[0.015]">{totals.total_units}</td>
-                        <td className="px-3 py-3 text-sm text-right tabular-nums text-white">€{fmt(totals.platform_fee)}</td>
-                        <td className="px-3 py-3 text-sm text-right tabular-nums text-white">€{fmt(totals.commissions)}</td>
-                        <td className="px-3 py-3 text-sm text-right tabular-nums text-white">€{fmt(totals.ad_spend)}</td>
+                        <td className="px-3 py-3 text-sm text-right tabular-nums text-gray-400 bg-white/[0.015]">{cs}{fmt(totals.platform_fee)}</td>
+                        <td className="px-3 py-3 text-sm text-right tabular-nums text-white">{cs}{fmt(totals.commissions)}</td>
+                        <td className="px-3 py-3 text-sm text-right tabular-nums text-white">{cs}{fmt(totals.ad_spend)}</td>
                         <td className="px-3 py-3 text-sm text-right tabular-nums text-gray-400 bg-white/[0.015]">
                           {fmtPct(totals.gross_revenue > 0 ? (totals.ad_spend / totals.gross_revenue) * 100 : 0)}
                         </td>
-                        <td className="px-3 py-3 text-sm text-right tabular-nums text-gray-400 bg-white/[0.015]">€{fmt(totals.product_cost)}</td>
-                        <td className="px-3 py-3 text-sm text-right tabular-nums text-white">€{fmt(totals.postage_pick_pack)}</td>
-                        <td className="px-3 py-3 text-sm text-right tabular-nums text-white">€{fmt(totals.pick_pack)}</td>
+                        <td className="px-3 py-3 text-sm text-right tabular-nums text-gray-400 bg-white/[0.015]">{cs}{fmt(totals.product_cost)}</td>
+                        <td className="px-3 py-3 text-sm text-right tabular-nums text-white">{cs}{fmt(totals.postage_pick_pack)}</td>
+                        <td className="px-3 py-3 text-sm text-right tabular-nums text-white">{cs}{fmt(totals.pick_pack)}</td>
                         <td className={`px-3 py-3 text-sm text-right tabular-nums font-bold bg-white/[0.015] ${totals.profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                          €{fmt(totals.profit)}
+                          {cs}{fmt(totals.profit)}
                         </td>
                         <td className={`px-3 py-3 text-sm text-right tabular-nums font-bold bg-white/[0.015] ${totals.profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                           {fmtPct(totals.gross_revenue > 0 ? (totals.profit / totals.gross_revenue) * 100 : 0)}
@@ -1127,7 +1111,7 @@ function ProductModal({ product, platform, userId, supabase, onClose, onSaved }:
               className="w-full px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm text-white placeholder:text-gray-600 focus:outline-none focus:border-[#F24822]/50 transition" />
           </div>
           <div>
-            <label className="block text-xs text-gray-400 mb-1.5">COGS per unit (€) *</label>
+            <label className="block text-xs text-gray-400 mb-1.5">COGS per unit *</label>
             <input type="number" step="0.01" value={cogs} onChange={e => setCogs(e.target.value)} placeholder="0.00"
               className="w-full px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm text-white placeholder:text-gray-600 focus:outline-none focus:border-[#F24822]/50 transition [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
           </div>
