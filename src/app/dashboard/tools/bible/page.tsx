@@ -463,9 +463,11 @@ export default function BiblePage() {
   const editableColKeys = useMemo(() => {
     const keys: string[] = ['gross_revenue', 'refunds', 'num_orders']
     products.forEach(p => {
-      keys.push(`units_${p.id}`)
-      if (expandedProducts.has(p.id) && p.variants) {
-        p.variants.forEach(v => keys.push(`vunits_${v.id}`))
+      const hasVariants = p.variants && p.variants.length > 0
+      if (hasVariants) {
+        p.variants!.forEach(v => keys.push(`vunits_${v.id}`))
+      } else {
+        keys.push(`units_${p.id}`)
       }
     })
     keys.push('commissions', 'ad_spend', 'shipping_fee', 'postage_pick_pack', 'key_changes')
@@ -716,8 +718,12 @@ export default function BiblePage() {
     editingCell?.rowIdx === rowIdx && editingCell?.colKey === colKey
 
   // ── Count total header columns for colSpan ──
-  const variantColCount = products.reduce((s, p) => s + (expandedProducts.has(p.id) && p.variants ? p.variants.length : 0), 0)
-  const totalCols = 17 + products.length + variantColCount
+  // Count product columns: products with variants show variant cols only, others show 1 col
+  const productColCount = products.reduce((s, p) => {
+    const hasVariants = p.variants && p.variants.length > 0
+    return s + (hasVariants ? p.variants!.length : 1)
+  }, 0)
+  const totalCols = 17 + productColCount
 
   return (
     <div className="p-4 md:p-8 max-w-[1800px] mx-auto">
@@ -869,26 +875,32 @@ export default function BiblePage() {
                     <th className="px-3 py-3 text-right font-medium align-bottom whitespace-nowrap">Gross Rev</th>
                     <th className="px-3 py-3 text-right font-medium align-bottom">Refunds</th>
                     <th className="px-3 py-3 text-right font-medium align-bottom whitespace-nowrap"># Orders</th>
-                    {products.map(p => (
-                      <React.Fragment key={p.id}>
-                        <th className="px-3 pt-2 pb-1 text-right font-medium whitespace-nowrap align-bottom">
-                          <button onClick={() => p.variants && p.variants.length > 0 ? toggleProductExpand(p.id) : null}
-                            className="inline-flex items-center gap-1 hover:text-white transition">
-                            <span className="text-xs uppercase tracking-wider">{p.name}</span>
-                            {p.variants && p.variants.length > 0 && (
-                              expandedProducts.has(p.id) ? <ChevronDown size={10} /> : <ChevronRightIcon size={10} />
-                            )}
-                          </button>
-                          <span className="block text-[9px] text-gray-600 font-normal normal-case leading-tight">units</span>
-                        </th>
-                        {expandedProducts.has(p.id) && p.variants?.map(v => (
-                          <th key={v.id} className="px-2 py-3 text-right font-normal whitespace-nowrap align-bottom"
-                            style={{ background: 'rgba(155,14,229,0.04)' }}>
-                            <span className="text-[10px] text-purple-400/70">{v.sku_name}</span>
-                          </th>
-                        ))}
-                      </React.Fragment>
-                    ))}
+                    {products.map(p => {
+                      const hasVariants = p.variants && p.variants.length > 0
+                      return (
+                        <React.Fragment key={p.id}>
+                          {hasVariants ? (
+                            // Product with variants: show variant columns only (no parent units col)
+                            p.variants!.map((v, vi) => (
+                              <th key={v.id} className="px-2 pt-1 pb-2 text-right font-normal whitespace-nowrap align-bottom"
+                                style={{ background: 'rgba(155,14,229,0.04)' }}>
+                                {vi === 0 && (
+                                  <span className="block text-[9px] text-gray-500 font-medium uppercase tracking-wider mb-0.5 text-left">{p.name}</span>
+                                )}
+                                <span className="text-[10px] text-purple-400/70">{v.sku_name}</span>
+                                <span className="block text-[8px] text-gray-600 font-normal normal-case">units</span>
+                              </th>
+                            ))
+                          ) : (
+                            // Product without variants: single units column
+                            <th className="px-3 pt-2 pb-1 text-right font-medium whitespace-nowrap align-bottom">
+                              <span className="text-xs uppercase tracking-wider">{p.name}</span>
+                              <span className="block text-[9px] text-gray-600 font-normal normal-case leading-tight">units</span>
+                            </th>
+                          )}
+                        </React.Fragment>
+                      )
+                    })}
                     <th className="px-3 py-3 text-right font-medium align-bottom whitespace-nowrap">Total Units</th>
                     <th className="px-3 py-3 text-right font-medium align-bottom whitespace-nowrap">Platform Fee</th>
                     <th className="px-3 py-3 text-right font-medium align-bottom">Commissions</th>
@@ -937,21 +949,28 @@ export default function BiblePage() {
                             {EC('gross_revenue', e.gross_revenue)}
                             {EC('refunds', e.refunds)}
                             {EC('num_orders', e.num_orders)}
-                            {products.map(p => (
-                              <React.Fragment key={p.id}>
-                                {EC(`units_${p.id}`, getUnitsForEntry(e.id, p.id))}
-                                {expandedProducts.has(p.id) && p.variants?.map(v => (
-                                  <td key={v.id} ref={registerCell(rowIdx, `vunits_${v.id}`)}
-                                    onClick={(ev) => handleCellClick(rowIdx, `vunits_${v.id}`, ev)}
-                                    className={`px-2 py-2 text-sm text-right border-r border-white/[0.04] cursor-pointer transition-colors duration-100 ${isCellEditing(rowIdx, `vunits_${v.id}`) ? 'ring-2 ring-[#F24822]/40 ring-inset' : 'hover:bg-white/[0.04]'}`}
-                                    style={{ background: 'rgba(155,14,229,0.02)' }}>
-                                    <span className={`block tabular-nums text-xs ${getVariantUnitsForEntry(e.id, v.id) === 0 ? 'text-gray-600' : 'text-purple-300'}`}>
-                                      {getVariantUnitsForEntry(e.id, v.id) === 0 ? '—' : getVariantUnitsForEntry(e.id, v.id)}
-                                    </span>
-                                  </td>
-                                ))}
-                              </React.Fragment>
-                            ))}
+                            {products.map(p => {
+                              const hasVariants = p.variants && p.variants.length > 0
+                              return (
+                                <React.Fragment key={p.id}>
+                                  {hasVariants ? (
+                                    // Show variant unit cells only
+                                    p.variants!.map(v => (
+                                      <td key={v.id} ref={registerCell(rowIdx, `vunits_${v.id}`)}
+                                        onClick={(ev) => handleCellClick(rowIdx, `vunits_${v.id}`, ev)}
+                                        className={`px-2 py-2 text-sm text-right border-r border-white/[0.04] cursor-pointer transition-colors duration-100 ${isCellEditing(rowIdx, `vunits_${v.id}`) ? 'ring-2 ring-[#F24822]/40 ring-inset' : 'hover:bg-white/[0.04]'}`}
+                                        style={{ background: 'rgba(155,14,229,0.02)' }}>
+                                        <span className={`block tabular-nums text-xs ${getVariantUnitsForEntry(e.id, v.id) === 0 ? 'text-gray-600' : 'text-purple-300'}`}>
+                                          {getVariantUnitsForEntry(e.id, v.id) === 0 ? '—' : getVariantUnitsForEntry(e.id, v.id)}
+                                        </span>
+                                      </td>
+                                    ))
+                                  ) : (
+                                    EC(`units_${p.id}`, getUnitsForEntry(e.id, p.id))
+                                  )}
+                                </React.Fragment>
+                              )
+                            })}
                             <CalcCell value={getTotalUnits(e.id)} />
                             <CalcCell value={e.platform_fee} prefix={cs} />
                             {EC('commissions', e.commissions)}
@@ -979,14 +998,17 @@ export default function BiblePage() {
                         <td className="px-3 py-3 text-sm text-right tabular-nums text-white">{cs}{fmt(totals.refunds)}</td>
                         <td className="px-3 py-3 text-sm text-right tabular-nums text-white">{totals.num_orders}</td>
                         {products.map(p => {
-                          const total = entries.reduce((s, e) => s + getUnitsForEntry(e.id, p.id), 0)
+                          const hasVariants = p.variants && p.variants.length > 0
                           return (
                             <React.Fragment key={p.id}>
-                              <td className="px-3 py-3 text-sm text-right tabular-nums text-white">{total}</td>
-                              {expandedProducts.has(p.id) && p.variants?.map(v => {
-                                const vTotal = entries.reduce((s, e) => s + getVariantUnitsForEntry(e.id, v.id), 0)
-                                return <td key={v.id} className="px-2 py-3 text-sm text-right tabular-nums text-purple-300/70" style={{ background: 'rgba(155,14,229,0.04)' }}>{vTotal}</td>
-                              })}
+                              {hasVariants ? (
+                                p.variants!.map(v => {
+                                  const vTotal = entries.reduce((s, e) => s + getVariantUnitsForEntry(e.id, v.id), 0)
+                                  return <td key={v.id} className="px-2 py-3 text-sm text-right tabular-nums text-purple-300/70" style={{ background: 'rgba(155,14,229,0.04)' }}>{vTotal}</td>
+                                })
+                              ) : (
+                                <td className="px-3 py-3 text-sm text-right tabular-nums text-white">{entries.reduce((s, e) => s + getUnitsForEntry(e.id, p.id), 0)}</td>
+                              )}
                             </React.Fragment>
                           )
                         })}
