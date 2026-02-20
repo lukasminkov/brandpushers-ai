@@ -172,8 +172,14 @@ export default function AdminToolsPage() {
               <input value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F24822]/50" />
             </div>
             <div>
-              <label className="text-xs text-gray-400 mb-1 block">Link / URL</label>
-              <input value={form.link || ''} onChange={e => setForm(f => ({ ...f, link: e.target.value }))} placeholder="https://..." className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F24822]/50" />
+              <label className="text-xs text-gray-400 mb-1 block">Tool / Link</label>
+              <select value={form.link?.startsWith('/dashboard/tools/') ? form.link : '__custom'} onChange={e => setForm(f => ({ ...f, link: e.target.value === '__custom' ? '' : e.target.value }))} className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F24822]/50 appearance-none cursor-pointer">
+                <option value="/dashboard/tools/bible" className="bg-[#1a1a1a]">📊 The Bible</option>
+                <option value="__custom" className="bg-[#1a1a1a]">Custom URL…</option>
+              </select>
+              {(!form.link || !form.link.startsWith('/dashboard/tools/')) && (
+                <input value={form.link || ''} onChange={e => setForm(f => ({ ...f, link: e.target.value }))} placeholder="https://..." className="w-full mt-2 bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#F24822]/50" />
+              )}
             </div>
           </div>
           <div>
