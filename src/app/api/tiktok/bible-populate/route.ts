@@ -61,32 +61,56 @@ export async function POST(request: NextRequest) {
       if (tp.bible_product_id) productMap.set(tp.product_id, tp.bible_product_id)
     }
 
+    // Fetch variant mappings (sku_id -> variant_id + product_id)
+    const bibleProductIds = [...new Set(productMap.values())]
+    const { data: variants } = bibleProductIds.length > 0
+      ? await supabase
+          .from('bible_product_variants')
+          .select('id, bible_product_id, sku_id')
+          .in('bible_product_id', bibleProductIds)
+      : { data: [] }
+
+    const variantMap = new Map<string, { variantId: string; productId: string }>()
+    for (const v of variants || []) {
+      if (v.sku_id) variantMap.set(v.sku_id, { variantId: v.id, productId: v.bible_product_id })
+    }
+
     // Aggregate orders by day
     const dailyMap = new Map<string, {
       gross_revenue: number
       refunds: number
       num_orders: number
       commissions: number
+      shipping_fee: number
       productUnits: Map<string, number> // product_id -> units
+      variantUnits: Map<string, number> // variant_id -> units
     }>()
 
     for (const order of orders || []) {
       const date = new Date(order.order_create_time).toISOString().slice(0, 10)
       if (!dailyMap.has(date)) {
-        dailyMap.set(date, { gross_revenue: 0, refunds: 0, num_orders: 0, commissions: 0, productUnits: new Map() })
+        dailyMap.set(date, { gross_revenue: 0, refunds: 0, num_orders: 0, commissions: 0, shipping_fee: 0, productUnits: new Map(), variantUnits: new Map() })
       }
       const day = dailyMap.get(date)!
       day.gross_revenue += parseFloat(order.total_amount || 0)
       day.refunds += parseFloat(order.refund_amount || 0)
+      day.shipping_fee += parseFloat(order.shipping_fee || 0)
       day.num_orders += 1
 
-      // Product units from order items
-      const items = order.items as { product_id?: string; quantity?: number }[] || []
+      // Product + variant units from order items
+      const items = order.items as { product_id?: string; sku_id?: string; quantity?: number }[] || []
       for (const item of items) {
         if (item.product_id) {
           const bibleId = productMap.get(item.product_id)
           if (bibleId) {
             day.productUnits.set(bibleId, (day.productUnits.get(bibleId) || 0) + (item.quantity || 1))
+          }
+        }
+        // Track variant-level units
+        if (item.sku_id) {
+          const variantInfo = variantMap.get(item.sku_id)
+          if (variantInfo) {
+            day.variantUnits.set(variantInfo.variantId, (day.variantUnits.get(variantInfo.variantId) || 0) + (item.quantity || 1))
           }
         }
       }
@@ -96,7 +120,7 @@ export async function POST(request: NextRequest) {
     for (const aff of affOrders || []) {
       const date = new Date(aff.order_create_time).toISOString().slice(0, 10)
       if (!dailyMap.has(date)) {
-        dailyMap.set(date, { gross_revenue: 0, refunds: 0, num_orders: 0, commissions: 0, productUnits: new Map() })
+        dailyMap.set(date, { gross_revenue: 0, refunds: 0, num_orders: 0, commissions: 0, shipping_fee: 0, productUnits: new Map(), variantUnits: new Map() })
       }
       dailyMap.get(date)!.commissions += parseFloat(aff.commission_amount || 0)
     }
@@ -150,6 +174,7 @@ export async function POST(request: NextRequest) {
             num_orders: day.num_orders,
             platform_fee: platformFee,
             commissions,
+            shipping_fee: day.shipping_fee,
           })
           .eq('id', existing.id)
         entryId = existing.id
@@ -165,6 +190,7 @@ export async function POST(request: NextRequest) {
             num_orders: day.num_orders,
             platform_fee: platformFee,
             commissions,
+            shipping_fee: day.shipping_fee,
             gmv_max_ad_spend: 0,
             ad_spend: 0,
             ad_spend_pct: 0,
@@ -189,6 +215,24 @@ export async function POST(request: NextRequest) {
               platform: 'tiktok_shop',
               units_sold: units,
             }, { onConflict: 'entry_id,product_id' })
+        }
+
+        // Upsert variant-level units
+        for (const [variantId, units] of day.variantUnits) {
+          const variantInfo = [...variantMap.values()].find(v => v.variantId === variantId)
+          if (variantInfo) {
+            await supabase
+              .from('bible_variant_daily_units')
+              .upsert({
+                entry_id: entryId,
+                variant_id: variantId,
+                product_id: variantInfo.productId,
+                user_id: user.id,
+                date,
+                platform: 'tiktok_shop',
+                units_sold: units,
+              }, { onConflict: 'entry_id,variant_id' })
+          }
         }
       }
 

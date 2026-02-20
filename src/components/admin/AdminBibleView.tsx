@@ -11,7 +11,8 @@ interface DailyEntry {
   id: string; date: string; platform: string
   gross_revenue: number; refunds: number; num_orders: number
   platform_fee: number; commissions: number; gmv_max_ad_spend: number
-  ad_spend: number; postage_pick_pack: number; key_changes: string | null
+  ad_spend: number; postage_pick_pack: number; pick_pack: number
+  shipping_fee: number; key_changes: string | null
 }
 interface ProductUnits { id: string; entry_id: string; product_id: string; units_sold: number }
 
@@ -55,7 +56,7 @@ export default function AdminBibleView({ memberId, memberName }: { memberId: str
   const getProductCost = (entryId: string) =>
     products.reduce((s, p) => s + getUnits(entryId, p.id) * p.cogs, 0)
   const getProfit = (e: DailyEntry) =>
-    e.gross_revenue - e.refunds - e.platform_fee - e.commissions - e.gmv_max_ad_spend - e.ad_spend - getProductCost(e.id) - e.postage_pick_pack
+    e.gross_revenue - e.refunds - e.platform_fee - e.commissions - e.gmv_max_ad_spend - e.ad_spend - getProductCost(e.id) - (e.shipping_fee || 0) - e.postage_pick_pack - (e.pick_pack || 0)
 
   const chartData = useMemo(() =>
     [...entries].reverse().map(e => ({

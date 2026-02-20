@@ -242,6 +242,30 @@ export async function POST(request: NextRequest) {
                 .update({ bible_product_id: bibleProduct.id })
                 .eq('user_id', user.id)
                 .eq('product_id', product.id as string)
+
+              // Create variant entries for each SKU
+              const skus = (product.skus || []) as { id?: string; name?: string; seller_sku?: string }[]
+              for (const sku of skus) {
+                await supabase.from('bible_product_variants').upsert({
+                  bible_product_id: bibleProduct.id,
+                  sku_id: sku.id || null,
+                  sku_name: sku.name || sku.seller_sku || 'Default',
+                  cogs: 0,
+                  seller_sku: sku.seller_sku || null,
+                }, { onConflict: 'bible_product_id,sku_id' })
+              }
+            }
+          } else {
+            // Sync variants for existing bible products too
+            const bibleProductId = existing.bible_product_id
+            const skus = (product.skus || []) as { id?: string; name?: string; seller_sku?: string }[]
+            for (const sku of skus) {
+              await supabase.from('bible_product_variants').upsert({
+                bible_product_id: bibleProductId,
+                sku_id: sku.id || null,
+                sku_name: sku.name || sku.seller_sku || 'Default',
+                seller_sku: sku.seller_sku || null,
+              }, { onConflict: 'bible_product_id,sku_id' })
             }
           }
         }
