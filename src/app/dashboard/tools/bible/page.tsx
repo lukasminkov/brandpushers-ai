@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import {
   Plus, X, Trash2, Edit3, ChevronLeft, ChevronRight,
@@ -49,7 +49,19 @@ interface BibleSettings {
   tiktok_shop_fee: number
   amazon_fee: number
   shopify_fee: number
+  currency: string
 }
+
+const CURRENCIES: { code: string; symbol: string; label: string }[] = [
+  { code: 'USD', symbol: '$', label: 'USD ($)' },
+  { code: 'EUR', symbol: '€', label: 'EUR (€)' },
+  { code: 'GBP', symbol: '£', label: 'GBP (£)' },
+  { code: 'CAD', symbol: 'CA$', label: 'CAD (CA$)' },
+  { code: 'AUD', symbol: 'A$', label: 'AUD (A$)' },
+  { code: 'JPY', symbol: '¥', label: 'JPY (¥)' },
+  { code: 'CHF', symbol: 'CHF', label: 'CHF' },
+  { code: 'SEK', symbol: 'kr', label: 'SEK (kr)' },
+]
 
 type Platform = 'tiktok_shop' | 'amazon' | 'shopify'
 type DateRange = '7d' | '30d' | 'month' | 'custom'
@@ -70,7 +82,11 @@ const DEFAULT_SETTINGS: BibleSettings = {
   tiktok_shop_fee: 9,
   amazon_fee: 15,
   shopify_fee: 2.9,
+  currency: 'USD',
 }
+
+const getCurrencySymbol = (settings: BibleSettings) =>
+  CURRENCIES.find(c => c.code === settings.currency)?.symbol ?? '$'
 
 const fmt = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const fmtPct = (n: number) => (isFinite(n) ? n.toFixed(1) : '0.0') + '%'
@@ -94,10 +110,11 @@ const getPlatformFee = (settings: BibleSettings, platform: Platform) => {
 }
 
 // ── Inline Input (stable component — never remounts while typing) ──
-function InlineInput({ initialValue, onCommit, onNav, isText = false }: {
+// Uses refs for callbacks so the component never re-renders due to parent callback changes.
+const InlineInput = React.memo(function InlineInput({ initialValue, onCommitRef, onNavRef, isText = false }: {
   initialValue: string
-  onCommit: (val: string) => void
-  onNav: (dir: 'next' | 'prev' | 'down' | 'up' | 'cancel') => void
+  onCommitRef: React.RefObject<(val: string) => void>
+  onNavRef: React.RefObject<(dir: 'next' | 'prev' | 'down' | 'up' | 'cancel') => void>
   isText?: boolean
 }) {
   const ref = useRef<HTMLInputElement>(null)
@@ -111,8 +128,8 @@ function InlineInput({ initialValue, onCommit, onNav, isText = false }: {
   const commit = useCallback(() => {
     if (committed.current) return
     committed.current = true
-    onCommit(ref.current?.value ?? initialValue)
-  }, [onCommit, initialValue])
+    onCommitRef.current(ref.current?.value ?? initialValue)
+  }, [onCommitRef, initialValue])
 
   return (
     <input
@@ -123,15 +140,15 @@ function InlineInput({ initialValue, onCommit, onNav, isText = false }: {
       onBlur={() => { commit() }}
       onKeyDown={e => {
         if (e.key === 'Tab') {
-          e.preventDefault(); commit(); onNav(e.shiftKey ? 'prev' : 'next')
+          e.preventDefault(); commit(); onNavRef.current(e.shiftKey ? 'prev' : 'next')
         } else if (e.key === 'Enter') {
-          e.preventDefault(); commit(); onNav('down')
+          e.preventDefault(); commit(); onNavRef.current('down')
         } else if (e.key === 'Escape') {
-          e.preventDefault(); committed.current = true; onNav('cancel')
+          e.preventDefault(); committed.current = true; onNavRef.current('cancel')
         } else if (!isText && e.key === 'ArrowDown') {
-          e.preventDefault(); commit(); onNav('down')
+          e.preventDefault(); commit(); onNavRef.current('down')
         } else if (!isText && e.key === 'ArrowUp') {
-          e.preventDefault(); commit(); onNav('up')
+          e.preventDefault(); commit(); onNavRef.current('up')
         }
       }}
       className={`
@@ -142,7 +159,45 @@ function InlineInput({ initialValue, onCommit, onNav, isText = false }: {
       `}
     />
   )
-}
+})
+
+// ── Editable Cell (proper component with React.memo to prevent re-renders) ──
+const EditableCell = React.memo(function EditableCell({ rowIdx, colKey, displayValue, rawValue, isEditing, editValue, isText, onClickEdit, onCommitRef, onNavRef }: {
+  rowIdx: number
+  colKey: string
+  displayValue: string
+  rawValue: number | string
+  isEditing: boolean
+  editValue: string
+  isText?: boolean
+  onClickEdit: (rowIdx: number, colKey: string) => void
+  onCommitRef: React.RefObject<(val: string) => void>
+  onNavRef: React.RefObject<(dir: 'next' | 'prev' | 'down' | 'up' | 'cancel') => void>
+}) {
+  return (
+    <td
+      className={`
+        px-3 py-2 text-sm border-r border-white/[0.04] cursor-pointer transition-colors duration-100
+        ${isText ? 'text-left' : 'text-right'}
+        ${isEditing ? '' : 'hover:bg-white/[0.04]'}
+      `}
+      onClick={() => { if (!isEditing) onClickEdit(rowIdx, colKey) }}
+    >
+      {isEditing ? (
+        <InlineInput
+          initialValue={editValue}
+          isText={isText}
+          onCommitRef={onCommitRef}
+          onNavRef={onNavRef}
+        />
+      ) : (
+        <span className={`block tabular-nums ${typeof rawValue === 'number' && rawValue === 0 ? 'text-gray-600' : 'text-white'}`}>
+          {displayValue}
+        </span>
+      )}
+    </td>
+  )
+})
 
 // ── Calendar Picker ────────────────────────────────────────────────
 function CalendarPicker({ usedDates, onSelect, onClose }: {
@@ -250,6 +305,7 @@ function SettingsModal({ settings, onSave, onClose }: {
   const [ts, setTs] = useState(settings.tiktok_shop_fee)
   const [am, setAm] = useState(settings.amazon_fee)
   const [sh, setSh] = useState(settings.shopify_fee)
+  const [cur, setCur] = useState(settings.currency || 'USD')
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
@@ -265,6 +321,19 @@ function SettingsModal({ settings, onSave, onClose }: {
           <button onClick={onClose} className="text-gray-500 hover:text-white transition"><X size={18} /></button>
         </div>
         <div className="space-y-4">
+          <div>
+            <label className="block text-xs text-gray-400 mb-1.5">Currency</label>
+            <select
+              value={cur}
+              onChange={e => setCur(e.target.value)}
+              className="w-full px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm text-white focus:outline-none focus:border-[#F24822]/50 transition appearance-none cursor-pointer"
+              style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%239ca3af' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center' }}
+            >
+              {CURRENCIES.map(c => (
+                <option key={c.code} value={c.code} className="bg-[#161616]">{c.label}</option>
+              ))}
+            </select>
+          </div>
           {[
             { label: 'TikTok Shop Platform Fee', value: ts, set: setTs },
             { label: 'Amazon Platform Fee', value: am, set: setAm },
@@ -287,7 +356,7 @@ function SettingsModal({ settings, onSave, onClose }: {
         </div>
         <div className="flex justify-end mt-6">
           <button
-            onClick={() => onSave({ tiktok_shop_fee: ts, amazon_fee: am, shopify_fee: sh })}
+            onClick={() => onSave({ tiktok_shop_fee: ts, amazon_fee: am, shopify_fee: sh, currency: cur })}
             className="px-5 py-2.5 rounded-xl text-sm font-medium text-white transition hover:opacity-90"
             style={{ background: 'linear-gradient(135deg, #9B0EE5, #F24822)' }}
           >
@@ -387,7 +456,7 @@ export default function BiblePage() {
   const editableColKeys = useMemo(() => {
     const keys: string[] = ['gross_revenue', 'refunds', 'num_orders']
     products.forEach(p => keys.push(`units_${p.id}`))
-    keys.push('platform_fee', 'commissions', 'ad_spend', 'postage_pick_pack', 'pick_pack', 'key_changes')
+    keys.push('commissions', 'ad_spend', 'postage_pick_pack', 'pick_pack', 'key_changes')
     return keys
   }, [products])
 
