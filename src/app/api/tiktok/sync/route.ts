@@ -99,16 +99,22 @@ async function performSync(
       let allOrders: Record<string, unknown>[] = []
       const WINDOW = 30 * 24 * 60 * 60 // 30 days in seconds
       let windowStart = startTs
+      console.log(`[sync] Orders date range: ${new Date(startTs * 1000).toISOString()} to ${new Date(endTs * 1000).toISOString()}`)
       while (windowStart < endTs) {
         const windowEnd = Math.min(windowStart + WINDOW, endTs)
+        console.log(`[sync] Fetching window: ${new Date(windowStart * 1000).toISOString()} to ${new Date(windowEnd * 1000).toISOString()}`)
         let cursor: string | undefined
+        let windowOrders = 0
         do {
           const page = await fetchOrders(accessToken, shopCipher, windowStart, windowEnd, 50, cursor)
           allOrders = allOrders.concat(page.orders)
+          windowOrders += page.orders.length
           cursor = page.nextCursor
+          console.log(`[sync] Window page: ${page.orders.length} orders, total in window: ${windowOrders}, cursor: ${cursor ? 'yes' : 'no'}`)
         } while (cursor)
         windowStart = windowEnd
       }
+      console.log(`[sync] Total orders fetched: ${allOrders.length}`)
 
       // Upsert orders
       for (const order of allOrders) {
