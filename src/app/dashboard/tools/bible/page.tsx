@@ -393,6 +393,12 @@ export default function BiblePage() {
           return
         }
         if (data.sync_status !== 'idle') {
+          // Show progress: count orders synced so far
+          const { count } = await supabase
+            .from('tiktok_orders')
+            .select('*', { count: 'exact', head: true })
+            .eq('connection_id', tiktokConnection.id)
+          setTiktokSyncMsg(`Syncing orders… ${count || 0} fetched`)
           setTimeout(pollAndPopulate, 3000)
           return
         }
@@ -803,9 +809,21 @@ export default function BiblePage() {
             <Settings size={14} />
           </button>
         </div>
-        {tiktokSyncMsg && (
-          <div className={`flex items-center gap-1.5 text-xs mt-1 ${tiktokSyncMsg.startsWith('Error') ? 'text-red-400' : 'text-green-400'}`}>
-            {!tiktokSyncMsg.startsWith('Error') && <CheckCircle size={12} />}{tiktokSyncMsg}
+      </div>
+      {/* Sync status bar — fixed height so layout doesn't shift */}
+      <div className="h-6 flex items-center">
+        {tiktokSyncing && (
+          <div className="flex items-center gap-2 w-full">
+            <div className="flex-1 h-1 rounded-full bg-white/[0.06] overflow-hidden">
+              <div className="h-full bg-[#F24822] rounded-full animate-pulse" style={{ width: '100%', animationDuration: '2s' }} />
+            </div>
+            <span className="text-[11px] text-gray-400 whitespace-nowrap">{tiktokSyncMsg || 'Syncing…'}</span>
+          </div>
+        )}
+        {!tiktokSyncing && tiktokSyncMsg && (
+          <div className={`flex items-center gap-1.5 text-[11px] ${tiktokSyncMsg.startsWith('Error') ? 'text-red-400' : 'text-green-400/70'}`}>
+            {!tiktokSyncMsg.startsWith('Error') && <CheckCircle size={11} />}
+            <span>{tiktokSyncMsg}</span>
           </div>
         )}
       </div>
