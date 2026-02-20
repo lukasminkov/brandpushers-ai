@@ -616,8 +616,13 @@ export default function BiblePage() {
     allUnits.find(u => u.entry_id === entryId && u.product_id === productId)?.units_sold || 0
   const getVariantUnitsForEntry = (entryId: string, variantId: string) =>
     allVariantUnits.find(u => u.entry_id === entryId && u.variant_id === variantId)?.units_sold || 0
-  const getTotalUnits = (entryId: string) =>
-    allUnits.filter(u => u.entry_id === entryId).reduce((s, u) => s + u.units_sold, 0)
+  const getTotalUnits = (entryId: string) => {
+    // Sum product-level units (products without variants)
+    const productUnits = allUnits.filter(u => u.entry_id === entryId).reduce((s, u) => s + u.units_sold, 0)
+    // Sum variant-level units (products with variants)
+    const variantUnits = allVariantUnits.filter(u => u.entry_id === entryId).reduce((s, u) => s + u.units_sold, 0)
+    return productUnits + variantUnits
+  }
 
   const getProductCost = (entryId: string) => {
     let cost = 0
