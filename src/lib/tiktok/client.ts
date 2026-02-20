@@ -5,7 +5,7 @@
 import crypto from 'crypto'
 
 const TIKTOK_API_BASE = 'https://open-api.tiktokglobalshop.com'
-const TIKTOK_AUTH_BASE = 'https://auth.tiktok-shops.com'
+const TIKTOK_AUTH_BASE = 'https://services.tiktokshop.com'
 
 export interface TikTokTokens {
   access_token: string
@@ -64,7 +64,7 @@ export function generateSign(
  */
 export function getAuthUrl(state: string): string {
   const appKey = getAppKey()
-  return `${TIKTOK_AUTH_BASE}/oauth/authorize?app_key=${appKey}&state=${encodeURIComponent(state)}`
+  return `${TIKTOK_AUTH_BASE}/open/authorize?app_key=${appKey}&state=${encodeURIComponent(state)}`
 }
 
 /**
