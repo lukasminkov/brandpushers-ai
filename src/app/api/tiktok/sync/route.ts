@@ -105,13 +105,20 @@ async function performSync(
         console.log(`[sync] Fetching window: ${new Date(windowStart * 1000).toISOString()} to ${new Date(windowEnd * 1000).toISOString()}`)
         let cursor: string | undefined
         let windowOrders = 0
+        let pageNum = 0
         do {
-          const page = await fetchOrders(accessToken, shopCipher, windowStart, windowEnd, 50, cursor)
-          allOrders = allOrders.concat(page.orders)
-          windowOrders += page.orders.length
-          cursor = page.nextCursor
-          console.log(`[sync] Window page: ${page.orders.length} orders, total in window: ${windowOrders}, cursor: ${cursor ? 'yes' : 'no'}`)
-        } while (cursor)
+          pageNum++
+          try {
+            const page = await fetchOrders(accessToken, shopCipher, windowStart, windowEnd, 100, cursor)
+            allOrders = allOrders.concat(page.orders)
+            windowOrders += page.orders.length
+            cursor = page.nextCursor
+            console.log(`[sync] Window page ${pageNum}: ${page.orders.length} orders, total: ${windowOrders}, cursor: ${cursor ? 'yes' : 'no'}`)
+          } catch (pageErr) {
+            console.error(`[sync] Page ${pageNum} failed:`, pageErr)
+            cursor = undefined // break pagination on error
+          }
+        } while (cursor && pageNum < 20)
         windowStart = windowEnd
       }
       console.log(`[sync] Total orders fetched: ${allOrders.length}`)
