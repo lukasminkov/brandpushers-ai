@@ -87,6 +87,31 @@ export default function IntegrationsPage() {
     }
   }
 
+  // Poll sync status until idle/error
+  const pollSyncStatus = useCallback(async (connectionId: string) => {
+    const poll = async () => {
+      const { data } = await supabase
+        .from('tiktok_connections')
+        .select('sync_status, sync_error, last_sync_at')
+        .eq('id', connectionId)
+        .single()
+      if (!data) return
+      if (data.sync_status === 'idle') {
+        setSyncing(null)
+        setSuccess('Sync completed successfully!')
+        loadConnections()
+      } else if (data.sync_status === 'error') {
+        setSyncing(null)
+        setError(data.sync_error || 'Sync failed')
+        loadConnections()
+      } else {
+        // Still syncing, poll again in 3s
+        setTimeout(poll, 3000)
+      }
+    }
+    setTimeout(poll, 2000) // initial delay
+  }, [supabase, loadConnections])
+
   const handleSync = async (connectionId: string) => {
     setSyncing(connectionId)
     setError(null)
@@ -97,15 +122,15 @@ export default function IntegrationsPage() {
         body: JSON.stringify({ connectionId, syncType: 'all' }),
       })
       const data = await res.json()
-      if (data.success) {
-        setSuccess(`Synced: ${data.results.orders || 0} orders, ${data.results.products || 0} products, ${data.results.affiliate_orders || 0} affiliate orders`)
-        loadConnections()
-      } else {
-        setError(data.error || 'Sync failed')
+      if (data.status === 'syncing' || data.status === 'already_syncing') {
+        // Sync started in background — poll for completion
+        pollSyncStatus(connectionId)
+      } else if (data.error) {
+        setError(data.error)
+        setSyncing(null)
       }
     } catch {
       setError('Sync request failed')
-    } finally {
       setSyncing(null)
     }
   }

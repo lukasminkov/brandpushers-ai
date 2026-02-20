@@ -10,8 +10,50 @@ function getServiceClient() {
 }
 
 /**
+ * Convert a UTC ISO timestamp to a YYYY-MM-DD date string in the given timezone.
+ * TikTok Shop US reports in Pacific Time, so we default to America/Los_Angeles.
+ */
+function toDateInTimezone(isoString: string, timezone: string): string {
+  const d = new Date(isoString)
+  // Use Intl to get the date parts in the target timezone
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(d) // en-CA gives YYYY-MM-DD format
+  return parts
+}
+
+/**
+ * Calculate GMV from order line items: sum of (quantity × sale_price).
+ * This matches TikTok's "Gross Merchandise Value" metric.
+ */
+function calculateOrderGMV(order: Record<string, unknown>): number {
+  // Use raw_data which has the original TikTok response with line items
+  const rawData = (order.raw_data || order) as Record<string, unknown>
+  const lineItems = (rawData.line_items || rawData.order_line_list || []) as Record<string, unknown>[]
+  
+  let gmv = 0
+  for (const item of lineItems) {
+    const qty = parseFloat(String(item.quantity || 1))
+    const price = parseFloat(String(
+      item.sale_price || item.sku_sale_price || item.original_price || item.item_price || 0
+    ))
+    gmv += qty * price
+  }
+  
+  // If no line items found, fall back to the pre-calculated gmv field or subtotal
+  if (gmv === 0) {
+    gmv = parseFloat(String(order.gmv || order.subtotal || order.total_amount || 0))
+  }
+  
+  return gmv
+}
+
+/**
  * Populate Bible daily entries from synced TikTok order/affiliate/settlement data.
- * Aggregates by day and upserts into bible_daily_entries + bible_product_daily_units.
+ * Aggregates by day (in shop timezone) and upserts into bible_daily_entries + bible_product_daily_units.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -23,6 +65,14 @@ export async function POST(request: NextRequest) {
     if (!connectionId) return NextResponse.json({ error: 'connectionId required' }, { status: 400 })
 
     const supabase = getServiceClient()
+
+    // Get connection timezone (defaults to America/Los_Angeles for US shops)
+    const { data: connData } = await supabase
+      .from('tiktok_connections')
+      .select('timezone')
+      .eq('id', connectionId)
+      .single()
+    const timezone = connData?.timezone || 'America/Los_Angeles'
 
     // Fetch all TikTok orders in date range
     const { data: orders } = await supabase
@@ -75,24 +125,27 @@ export async function POST(request: NextRequest) {
       if (v.sku_id) variantMap.set(v.sku_id, { variantId: v.id, productId: v.bible_product_id })
     }
 
-    // Aggregate orders by day
+    // Aggregate orders by day (converted to shop timezone)
     const dailyMap = new Map<string, {
-      gross_revenue: number
+      gross_revenue: number // GMV = sum of line item prices
       refunds: number
       num_orders: number
       commissions: number
       shipping_fee: number
-      productUnits: Map<string, number> // product_id -> units
-      variantUnits: Map<string, number> // variant_id -> units
+      productUnits: Map<string, number>
+      variantUnits: Map<string, number>
     }>()
 
     for (const order of orders || []) {
-      const date = new Date(order.order_create_time).toISOString().slice(0, 10)
+      // Convert order time to shop timezone for date grouping
+      const date = toDateInTimezone(order.order_create_time, timezone)
       if (!dailyMap.has(date)) {
         dailyMap.set(date, { gross_revenue: 0, refunds: 0, num_orders: 0, commissions: 0, shipping_fee: 0, productUnits: new Map(), variantUnits: new Map() })
       }
       const day = dailyMap.get(date)!
-      day.gross_revenue += parseFloat(order.total_amount || 0)
+
+      // Use GMV (sum of line item prices) instead of total_amount
+      day.gross_revenue += calculateOrderGMV(order)
       day.refunds += parseFloat(order.refund_amount || 0)
       day.shipping_fee += parseFloat(order.shipping_fee || 0)
       day.num_orders += 1
@@ -106,7 +159,6 @@ export async function POST(request: NextRequest) {
             day.productUnits.set(bibleId, (day.productUnits.get(bibleId) || 0) + (item.quantity || 1))
           }
         }
-        // Track variant-level units
         if (item.sku_id) {
           const variantInfo = variantMap.get(item.sku_id)
           if (variantInfo) {
@@ -116,9 +168,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Add affiliate commissions by day
+    // Add affiliate commissions by day (also timezone-converted)
     for (const aff of affOrders || []) {
-      const date = new Date(aff.order_create_time).toISOString().slice(0, 10)
+      const date = toDateInTimezone(aff.order_create_time, timezone)
       if (!dailyMap.has(date)) {
         dailyMap.set(date, { gross_revenue: 0, refunds: 0, num_orders: 0, commissions: 0, shipping_fee: 0, productUnits: new Map(), variantUnits: new Map() })
       }
@@ -129,7 +181,7 @@ export async function POST(request: NextRequest) {
     const settlementByDate = new Map<string, { platform_fee: number; affiliate_commission: number }>()
     for (const s of settlements || []) {
       if (s.settlement_time) {
-        const date = new Date(s.settlement_time).toISOString().slice(0, 10)
+        const date = toDateInTimezone(s.settlement_time, timezone)
         settlementByDate.set(date, {
           platform_fee: parseFloat(s.platform_fee || 0),
           affiliate_commission: parseFloat(s.affiliate_commission || 0),
@@ -143,18 +195,13 @@ export async function POST(request: NextRequest) {
       const estimatedPlatformFee = day.gross_revenue * (platformFeePercent / 100)
       const settlement = settlementByDate.get(date)
 
-      // Use settlement data if available, otherwise estimated
       const platformFee = settlement ? settlement.platform_fee : estimatedPlatformFee
       const commissions = settlement ? settlement.affiliate_commission : day.commissions
 
-      // Calculate match percentage
-      let matchPct = 50 // default: estimated only
-      if (settlement) {
-        matchPct = 100 // settlement data confirmed
-      }
+      let matchPct = 50
+      if (settlement) matchPct = 100
 
       // Upsert Bible daily entry
-      // First check if entry exists
       const { data: existing } = await supabase
         .from('bible_daily_entries')
         .select('id')
@@ -165,7 +212,6 @@ export async function POST(request: NextRequest) {
 
       let entryId: string
       if (existing) {
-        // Update only TikTok-synced fields, preserve manual fields (postage, pick_pack, key_changes)
         await supabase
           .from('bible_daily_entries')
           .update({
@@ -217,7 +263,6 @@ export async function POST(request: NextRequest) {
             }, { onConflict: 'entry_id,product_id' })
         }
 
-        // Upsert variant-level units
         for (const [variantId, units] of day.variantUnits) {
           const variantInfo = [...variantMap.values()].find(v => v.variantId === variantId)
           if (variantInfo) {
@@ -236,7 +281,6 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Log sync with match percentage
       await supabase
         .from('bible_sync_log')
         .upsert({
