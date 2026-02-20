@@ -123,8 +123,8 @@ async function performSync(
       }
       console.log(`[sync] Total orders fetched: ${allOrders.length}`)
 
-      // Upsert orders
-      for (const order of allOrders) {
+      // Batch upsert orders (100 at a time to avoid timeout)
+      const orderRows = allOrders.map(order => {
         const items = ((order.line_items || order.order_line_list || []) as Record<string, unknown>[]).map(
           (item: Record<string, unknown>) => ({
             product_id: item.product_id,
@@ -135,10 +135,7 @@ async function performSync(
             price: item.sale_price || item.original_price,
           })
         )
-
-        const gmv = calculateGMV(order)
-
-        await supabase.from('tiktok_orders').upsert({
+        return {
           user_id: userId,
           connection_id: connectionId,
           order_id: order.id as string,
@@ -146,7 +143,7 @@ async function performSync(
           payment_status: (order.payment as Record<string, unknown>)?.status as string,
           total_amount: parseFloat(((order.payment as Record<string, unknown>)?.total_amount || '0') as string),
           subtotal: parseFloat(((order.payment as Record<string, unknown>)?.sub_total || '0') as string),
-          gmv,
+          gmv: calculateGMV(order),
           shipping_fee: parseFloat(((order.payment as Record<string, unknown>)?.shipping_fee || '0') as string),
           platform_discount: parseFloat(((order.payment as Record<string, unknown>)?.platform_discount || '0') as string),
           seller_discount: parseFloat(((order.payment as Record<string, unknown>)?.seller_discount || '0') as string),
@@ -157,7 +154,13 @@ async function performSync(
           items,
           raw_data: order,
           updated_at: new Date().toISOString(),
-        }, { onConflict: 'user_id,order_id' })
+        }
+      })
+
+      // Upsert in batches of 100
+      for (let i = 0; i < orderRows.length; i += 100) {
+        const batch = orderRows.slice(i, i + 100)
+        await supabase.from('tiktok_orders').upsert(batch, { onConflict: 'user_id,order_id' })
       }
 
       results.orders = allOrders.length
