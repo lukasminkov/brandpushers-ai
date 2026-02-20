@@ -222,26 +222,35 @@ export async function fetchOrders(
 export async function fetchAffiliateOrders(
   accessToken: string,
   shopCipher: string,
-  startDate: string, // YYYY-MM-DD
+  startDate: string, // YYYY-MM-DD — converted to unix ts
   endDate: string,
   cursor?: string
 ): Promise<{ orders: Record<string, unknown>[]; nextCursor?: string }> {
+  const startTs = Math.floor(new Date(startDate).getTime() / 1000)
+  const endTs = Math.floor(new Date(endDate).getTime() / 1000)
+
+  const queryExtra: Record<string, string> = {
+    page_size: '50',
+    ...(cursor ? { page_token: cursor } : {}),
+  }
+
+  const body: Record<string, unknown> = {
+    create_time_ge: startTs,
+    create_time_lt: endTs,
+  }
+
   const data = await apiRequest(
-    '/affiliate/202309/orders',
-    'GET',
+    '/affiliate_seller/202410/orders/search',
+    'POST',
     accessToken,
     shopCipher,
-    {
-      start_date: startDate,
-      end_date: endDate,
-      page_size: '50',
-      ...(cursor ? { cursor } : {}),
-    }
+    queryExtra,
+    body
   )
   
   return {
     orders: (data.orders || []) as Record<string, unknown>[],
-    nextCursor: data.next_cursor as string | undefined,
+    nextCursor: data.next_page_token as string | undefined,
   }
 }
 

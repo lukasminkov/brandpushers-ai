@@ -121,65 +121,75 @@ export async function POST(request: NextRequest) {
         results.orders = allOrders.length
       }
 
-      // Sync affiliate orders
+      // Sync affiliate orders (non-fatal — scope may not be granted)
       if (syncType === 'all' || syncType === 'affiliate') {
-        let allAffOrders: Record<string, unknown>[] = []
-        let cursor: string | undefined
-        do {
-          const page = await fetchAffiliateOrders(accessToken, shopCipher, startStr, endStr, cursor)
-          allAffOrders = allAffOrders.concat(page.orders)
-          cursor = page.nextCursor
-        } while (cursor)
+        try {
+          let allAffOrders: Record<string, unknown>[] = []
+          let cursor: string | undefined
+          do {
+            const page = await fetchAffiliateOrders(accessToken, shopCipher, startStr, endStr, cursor)
+            allAffOrders = allAffOrders.concat(page.orders)
+            cursor = page.nextCursor
+          } while (cursor)
 
-        for (const order of allAffOrders) {
-          await supabase.from('tiktok_affiliate_orders').upsert({
-            user_id: user.id,
-            connection_id: connectionId,
-            order_id: order.order_id as string,
-            affiliate_type: order.collaboration_type as string,
-            commission_rate: parseFloat(String(order.commission_rate || '0')),
-            commission_amount: parseFloat(String(order.estimated_commission || '0')),
-            order_amount: parseFloat(String(order.total_payment_amount || '0')),
-            product_id: order.product_id as string,
-            product_name: order.product_name as string,
-            creator_username: order.creator_username as string,
-            order_create_time: order.create_time ? new Date((order.create_time as number) * 1000).toISOString() : null,
-            raw_data: order,
-          }, { onConflict: 'user_id,order_id,affiliate_type' })
+          for (const order of allAffOrders) {
+            await supabase.from('tiktok_affiliate_orders').upsert({
+              user_id: user.id,
+              connection_id: connectionId,
+              order_id: order.order_id as string,
+              affiliate_type: order.collaboration_type as string,
+              commission_rate: parseFloat(String(order.commission_rate || '0')),
+              commission_amount: parseFloat(String(order.estimated_commission || '0')),
+              order_amount: parseFloat(String(order.total_payment_amount || '0')),
+              product_id: order.product_id as string,
+              product_name: order.product_name as string,
+              creator_username: order.creator_username as string,
+              order_create_time: order.create_time ? new Date((order.create_time as number) * 1000).toISOString() : null,
+              raw_data: order,
+            }, { onConflict: 'user_id,order_id,affiliate_type' })
+          }
+
+          results.affiliate_orders = allAffOrders.length
+        } catch (affErr) {
+          console.warn('Affiliate sync skipped:', affErr)
+          results.affiliate_orders = 'skipped (scope not available)'
         }
-
-        results.affiliate_orders = allAffOrders.length
       }
 
-      // Sync settlements
+      // Sync settlements (non-fatal)
       if (syncType === 'all' || syncType === 'settlements') {
-        let allSettlements: Record<string, unknown>[] = []
-        let cursor: string | undefined
-        do {
-          const page = await fetchSettlements(accessToken, shopCipher, startTs, endTs, cursor)
-          allSettlements = allSettlements.concat(page.settlements)
-          cursor = page.nextCursor
-        } while (cursor)
+        try {
+          let allSettlements: Record<string, unknown>[] = []
+          let cursor: string | undefined
+          do {
+            const page = await fetchSettlements(accessToken, shopCipher, startTs, endTs, cursor)
+            allSettlements = allSettlements.concat(page.settlements)
+            cursor = page.nextCursor
+          } while (cursor)
 
-        for (const settlement of allSettlements) {
-          await supabase.from('tiktok_settlements').upsert({
-            user_id: user.id,
-            connection_id: connectionId,
-            settlement_id: settlement.id as string,
-            settlement_time: settlement.settlement_time ? new Date((settlement.settlement_time as number) * 1000).toISOString() : null,
-            settlement_amount: parseFloat(String(settlement.settlement_amount || '0')),
-            revenue: parseFloat(String(settlement.revenue || '0')),
-            platform_fee: parseFloat(String(settlement.platform_fee || '0')),
-            affiliate_commission: parseFloat(String(settlement.affiliate_commission || '0')),
-            shipping_fee_subsidy: parseFloat(String(settlement.shipping_fee_subsidy || '0')),
-            refund_amount: parseFloat(String(settlement.refund_amount || '0')),
-            adjustment: parseFloat(String(settlement.adjustment || '0')),
-            currency: (settlement.currency || 'USD') as string,
-            raw_data: settlement,
-          }, { onConflict: 'user_id,settlement_id' })
+          for (const settlement of allSettlements) {
+            await supabase.from('tiktok_settlements').upsert({
+              user_id: user.id,
+              connection_id: connectionId,
+              settlement_id: settlement.id as string,
+              settlement_time: settlement.settlement_time ? new Date((settlement.settlement_time as number) * 1000).toISOString() : null,
+              settlement_amount: parseFloat(String(settlement.settlement_amount || '0')),
+              revenue: parseFloat(String(settlement.revenue || '0')),
+              platform_fee: parseFloat(String(settlement.platform_fee || '0')),
+              affiliate_commission: parseFloat(String(settlement.affiliate_commission || '0')),
+              shipping_fee_subsidy: parseFloat(String(settlement.shipping_fee_subsidy || '0')),
+              refund_amount: parseFloat(String(settlement.refund_amount || '0')),
+              adjustment: parseFloat(String(settlement.adjustment || '0')),
+              currency: (settlement.currency || 'USD') as string,
+              raw_data: settlement,
+            }, { onConflict: 'user_id,settlement_id' })
+          }
+
+          results.settlements = allSettlements.length
+        } catch (settErr) {
+          console.warn('Settlement sync skipped:', settErr)
+          results.settlements = 'skipped'
         }
-
-        results.settlements = allSettlements.length
       }
 
       // Sync products
