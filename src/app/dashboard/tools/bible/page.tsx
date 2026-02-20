@@ -706,6 +706,7 @@ export default function BiblePage() {
   }, [])
 
   // Called when the floating editor navigates
+  // Note: FloatingEditor calls commit() BEFORE onNav(), so the value is already committed
   const handleFloatingNav = useCallback((dir: 'next' | 'prev' | 'down' | 'up' | 'cancel') => {
     const ec = editingCellRef.current
     if (!ec) return
@@ -714,7 +715,6 @@ export default function BiblePage() {
       setActiveCellEl(null)
       return
     }
-    // Commit current value first — read from the input directly (handled by FloatingEditor's commit)
     navigateCellRef.current(ec.rowIdx, ec.colKey, dir)
   }, [])
 
@@ -924,7 +924,29 @@ export default function BiblePage() {
                         const profit = getProfit(e)
                         const profitPct = getProfitPct(e)
                         const profitColor = profit >= 0 ? 'text-green-400' : 'text-red-400'
-                        const isEditingRow = editingCell?.rowIdx === rowIdx
+
+                        // Helper to render an editable td — just a plain cell, no input inside
+                        const EC = (colKey: string, value: number | string, isText = false) => {
+                          const editing = isCellEditing(rowIdx, colKey)
+                          const display = getDisplayValue(value, isText)
+                          return (
+                            <td
+                              key={colKey}
+                              ref={registerCell(rowIdx, colKey)}
+                              onClick={(ev) => handleCellClick(rowIdx, colKey, ev)}
+                              className={`
+                                px-3 py-2 text-sm border-r border-white/[0.04] cursor-pointer transition-colors duration-100
+                                ${isText ? 'text-left' : 'text-right'}
+                                ${editing ? 'ring-2 ring-[#F24822]/40 ring-inset' : 'hover:bg-white/[0.04]'}
+                              `}
+                            >
+                              <span className={`block tabular-nums ${typeof value === 'number' && value === 0 ? 'text-gray-600' : 'text-white'}`}>
+                                {display}
+                              </span>
+                            </td>
+                          )
+                        }
+
                         return (
                           <tr
                             key={e.id}
@@ -934,29 +956,25 @@ export default function BiblePage() {
                             <td className="px-3 py-2 text-sm font-medium sticky left-0 z-10 whitespace-nowrap" style={{ background: '#141414' }}>
                               <span className="text-white">{fmtDate(e.date)}</span>
                             </td>
-                            <EditableCell rowIdx={rowIdx} colKey="gross_revenue" displayValue={getDisplayValue(e.gross_revenue, false)} rawValue={e.gross_revenue} isEditing={isEditingRow && editingCell?.colKey === 'gross_revenue'} editValue={editValue} onClickEdit={onClickEdit} onCommitRef={onCommitRef} onNavRef={onNavRef} />
-                            <EditableCell rowIdx={rowIdx} colKey="refunds" displayValue={getDisplayValue(e.refunds, false)} rawValue={e.refunds} isEditing={isEditingRow && editingCell?.colKey === 'refunds'} editValue={editValue} onClickEdit={onClickEdit} onCommitRef={onCommitRef} onNavRef={onNavRef} />
-                            <EditableCell rowIdx={rowIdx} colKey="num_orders" displayValue={getDisplayValue(e.num_orders, false)} rawValue={e.num_orders} isEditing={isEditingRow && editingCell?.colKey === 'num_orders'} editValue={editValue} onClickEdit={onClickEdit} onCommitRef={onCommitRef} onNavRef={onNavRef} />
-                            {products.map(p => {
-                              const colKey = `units_${p.id}`
-                              const val = getUnitsForEntry(e.id, p.id)
-                              return <EditableCell key={colKey} rowIdx={rowIdx} colKey={colKey} displayValue={dashInt(val)} rawValue={val} isEditing={isEditingRow && editingCell?.colKey === colKey} editValue={editValue} onClickEdit={onClickEdit} onCommitRef={onCommitRef} onNavRef={onNavRef} />
-                            })}
+                            {EC('gross_revenue', e.gross_revenue)}
+                            {EC('refunds', e.refunds)}
+                            {EC('num_orders', e.num_orders)}
+                            {products.map(p => EC(`units_${p.id}`, getUnitsForEntry(e.id, p.id)))}
                             <CalcCell value={getTotalUnits(e.id)} />
                             <CalcCell value={e.platform_fee} prefix={cs} />
-                            <EditableCell rowIdx={rowIdx} colKey="commissions" displayValue={getDisplayValue(e.commissions, false)} rawValue={e.commissions} isEditing={isEditingRow && editingCell?.colKey === 'commissions'} editValue={editValue} onClickEdit={onClickEdit} onCommitRef={onCommitRef} onNavRef={onNavRef} />
-                            <EditableCell rowIdx={rowIdx} colKey="ad_spend" displayValue={getDisplayValue(getAdSpend(e), false)} rawValue={getAdSpend(e)} isEditing={isEditingRow && editingCell?.colKey === 'ad_spend'} editValue={editValue} onClickEdit={onClickEdit} onCommitRef={onCommitRef} onNavRef={onNavRef} />
+                            {EC('commissions', e.commissions)}
+                            {EC('ad_spend', getAdSpend(e))}
                             <CalcCell value={fmtPct(getAdSpendPct(e))} />
                             <CalcCell value={getProductCost(e.id)} prefix={cs} />
-                            <EditableCell rowIdx={rowIdx} colKey="postage_pick_pack" displayValue={getDisplayValue(e.postage_pick_pack, false)} rawValue={e.postage_pick_pack} isEditing={isEditingRow && editingCell?.colKey === 'postage_pick_pack'} editValue={editValue} onClickEdit={onClickEdit} onCommitRef={onCommitRef} onNavRef={onNavRef} />
-                            <EditableCell rowIdx={rowIdx} colKey="pick_pack" displayValue={getDisplayValue(e.pick_pack || 0, false)} rawValue={e.pick_pack || 0} isEditing={isEditingRow && editingCell?.colKey === 'pick_pack'} editValue={editValue} onClickEdit={onClickEdit} onCommitRef={onCommitRef} onNavRef={onNavRef} />
+                            {EC('postage_pick_pack', e.postage_pick_pack)}
+                            {EC('pick_pack', e.pick_pack || 0)}
                             <td className={`px-3 py-2 text-sm text-right border-r border-white/[0.04] bg-white/[0.015] font-bold tabular-nums ${profitColor}`}>
                               {profit === 0 ? '—' : `${cs}${fmt(profit)}`}
                             </td>
                             <td className={`px-3 py-2 text-sm text-right border-r border-white/[0.04] bg-white/[0.015] font-bold tabular-nums ${profitColor}`}>
                               {profit === 0 ? '—' : fmtPct(profitPct)}
                             </td>
-                            <EditableCell rowIdx={rowIdx} colKey="key_changes" displayValue={getDisplayValue(e.key_changes || '', true)} rawValue={e.key_changes || ''} isEditing={isEditingRow && editingCell?.colKey === 'key_changes'} editValue={editValue} isText onClickEdit={onClickEdit} onCommitRef={onCommitRef} onNavRef={onNavRef} />
+                            {EC('key_changes', e.key_changes || '', true)}
                           </tr>
                         )
                       })}
@@ -1044,6 +1062,18 @@ export default function BiblePage() {
           supabase={supabase}
           onClose={() => { setShowAddProduct(false); setEditProduct(null) }}
           onSaved={() => { setShowAddProduct(false); setEditProduct(null); loadData() }}
+        />
+      )}
+
+      {/* Floating Editor — lives completely outside the table */}
+      {editingCell && activeCellEl && (
+        <FloatingEditor
+          key={`${editingCell.rowIdx}-${editingCell.colKey}`}
+          cellEl={activeCellEl}
+          initialValue={editValue}
+          isText={editingCell.colKey === 'key_changes'}
+          onCommit={handleFloatingCommit}
+          onNav={handleFloatingNav}
         />
       )}
     </div>
