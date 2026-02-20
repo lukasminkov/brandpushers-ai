@@ -246,6 +246,27 @@ export async function POST(request: NextRequest) {
           }
         }
 
+        // Clean up non-live products: remove tiktok_products + linked bible_products
+        const liveProductIds = allProducts.map(p => p.id as string)
+        const { data: staleProducts } = await supabase
+          .from('tiktok_products')
+          .select('id, product_id, bible_product_id')
+          .eq('user_id', user.id)
+          .eq('connection_id', connectionId)
+
+        if (staleProducts) {
+          const toRemove = staleProducts.filter(p => !liveProductIds.includes(p.product_id))
+          for (const stale of toRemove) {
+            // Delete linked bible product
+            if (stale.bible_product_id) {
+              await supabase.from('bible_products').delete().eq('id', stale.bible_product_id)
+            }
+            // Delete tiktok product
+            await supabase.from('tiktok_products').delete().eq('id', stale.id)
+          }
+          results.products_removed = toRemove.length
+        }
+
         results.products = allProducts.length
       }
 
