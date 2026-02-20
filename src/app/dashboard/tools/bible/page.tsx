@@ -780,7 +780,6 @@ export default function BiblePage() {
             }`}
           >
             {p.label}
-            <span className="ml-2 text-[10px] text-gray-500">{getPlatformFee(settings, p.key)}%</span>
           </button>
         ))}
       </div>
