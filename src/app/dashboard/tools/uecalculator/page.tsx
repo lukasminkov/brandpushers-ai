@@ -358,6 +358,48 @@ export default function CalculatorPage() {
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         {/* ── Left: Inputs (3 cols) ──────────────────────────────── */}
         <div className="lg:col-span-3 space-y-6">
+
+          {/* ─ Target mode: show target slider FIRST ─ */}
+          {mode === 'target' && platform === 'tiktok_shop' && (
+            <div className="rounded-2xl p-5" style={{ background: '#141414', border: '1px solid rgba(242,72,34,0.15)' }}>
+              <h2 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+                <TrendingUp size={14} className="text-[#F24822]" /> Target ROI
+              </h2>
+              <div className="space-y-4">
+                <SliderInput label="Desired ROI" value={ttTargetRoas} onChange={setTtTargetRoas} min={0.5} max={20} step={0.1} suffix="x" />
+                <p className="text-[11px] text-gray-500">
+                  At {ttTargetRoas}x ROI, you'd spend <span className="text-white font-medium">${fmt(ttCalc.adSpendAtTarget)}</span> on ads per ${fmt(salesPrice)} sale
+                </p>
+              </div>
+            </div>
+          )}
+          {mode === 'target' && platform === 'amazon' && (
+            <div className="rounded-2xl p-5" style={{ background: '#141414', border: '1px solid rgba(242,72,34,0.15)' }}>
+              <h2 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+                <TrendingUp size={14} className="text-[#F24822]" /> Amazon PPC — Target ACoS
+              </h2>
+              <div className="space-y-4">
+                <SliderInput label="Target ACoS" value={amzTargetAcos} onChange={setAmzTargetAcos} min={1} max={100} step={0.5} />
+                <p className="text-[11px] text-gray-500">
+                  At {amzTargetAcos}% ACoS, you'd spend <span className="text-white font-medium">${fmt(amzCalc.adSpendAtTarget)}</span> on ads per ${fmt(salesPrice)} sale
+                </p>
+              </div>
+            </div>
+          )}
+          {mode === 'target' && platform === 'shopify' && (
+            <div className="rounded-2xl p-5" style={{ background: '#141414', border: '1px solid rgba(242,72,34,0.15)' }}>
+              <h2 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+                <TrendingUp size={14} className="text-[#F24822]" /> Ad Spend — Target ROAS
+              </h2>
+              <div className="space-y-4">
+                <SliderInput label="Target ROAS" value={shopTargetRoas} onChange={setShopTargetRoas} min={0.5} max={20} step={0.1} suffix="x" />
+                <p className="text-[11px] text-gray-500">
+                  At {shopTargetRoas}x ROAS, you'd spend <span className="text-white font-medium">${fmt(shopCalc.adSpendAtTarget)}</span> on ads per ${fmt(salesPrice)} sale
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Shared: Product Economics */}
           <div className="rounded-2xl p-5" style={{ background: '#141414', border: '1px solid rgba(255,255,255,0.06)' }}>
             <h2 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
@@ -481,50 +523,7 @@ export default function CalculatorPage() {
             </div>
           )}
 
-          {/* ─ Amazon: Advertising (ACoS) ─ */}
-          {platform === 'amazon' && mode === 'target' && (
-            <div className="rounded-2xl p-5" style={{ background: '#141414', border: '1px solid rgba(242,72,34,0.15)' }}>
-              <h2 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
-                <TrendingUp size={14} className="text-[#F24822]" /> Amazon PPC — Target ACoS
-              </h2>
-              <div className="space-y-4">
-                <SliderInput label="Target ACoS" value={amzTargetAcos} onChange={setAmzTargetAcos} min={1} max={100} step={0.5} />
-                <p className="text-[11px] text-gray-500">
-                  At {amzTargetAcos}% ACoS, you'd spend <span className="text-white font-medium">${fmt(amzCalc.adSpendAtTarget)}</span> on ads per ${fmt(salesPrice)} sale
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* ─ Shopify: Target ROAS ─ */}
-          {platform === 'shopify' && mode === 'target' && (
-            <div className="rounded-2xl p-5" style={{ background: '#141414', border: '1px solid rgba(242,72,34,0.15)' }}>
-              <h2 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
-                <TrendingUp size={14} className="text-[#F24822]" /> Ad Spend — Target ROAS
-              </h2>
-              <div className="space-y-4">
-                <SliderInput label="Target ROAS" value={shopTargetRoas} onChange={setShopTargetRoas} min={0.5} max={20} step={0.1} suffix="x" />
-                <p className="text-[11px] text-gray-500">
-                  At {shopTargetRoas}x ROAS, you'd spend <span className="text-white font-medium">${fmt(shopCalc.adSpendAtTarget)}</span> on ads per ${fmt(salesPrice)} sale
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* ─ TikTok: Target ROI ─ */}
-          {platform === 'tiktok_shop' && mode === 'target' && (
-            <div className="rounded-2xl p-5" style={{ background: '#141414', border: '1px solid rgba(242,72,34,0.15)' }}>
-              <h2 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
-                <TrendingUp size={14} className="text-[#F24822]" /> Target ROI
-              </h2>
-              <div className="space-y-4">
-                <SliderInput label="Desired ROI" value={ttTargetRoas} onChange={setTtTargetRoas} min={0.5} max={20} step={0.1} suffix="x" />
-                <p className="text-[11px] text-gray-500">
-                  At {ttTargetRoas}x ROI, you'd spend <span className="text-white font-medium">${fmt(ttCalc.adSpendAtTarget)}</span> on ads per ${fmt(salesPrice)} sale
-                </p>
-              </div>
-            </div>
-          )}
+          {/* Target ROI/ACoS/ROAS sections moved to top of inputs when mode === 'target' */}
         </div>
 
         {/* ── Right: Results (2 cols) ────────────────────────────── */}
