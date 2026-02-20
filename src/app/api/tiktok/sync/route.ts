@@ -78,9 +78,9 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Default: last 30 days
+      // Default: maximum range (365 days back)
       const end = endDate ? new Date(endDate) : new Date()
-      const start = startDate ? new Date(startDate) : new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000)
+      const start = startDate ? new Date(startDate) : new Date(end.getTime() - 365 * 24 * 60 * 60 * 1000)
       const startTs = Math.floor(start.getTime() / 1000)
       const endTs = Math.floor(end.getTime() / 1000)
       const startStr = start.toISOString().split('T')[0]
@@ -88,15 +88,21 @@ export async function POST(request: NextRequest) {
 
       const results: Record<string, unknown> = {}
 
-      // Sync orders
+      // Sync orders (batch in 30-day windows — TikTok limits per-request range)
       if (syncType === 'all' || syncType === 'orders') {
         let allOrders: Record<string, unknown>[] = []
-        let cursor: string | undefined
-        do {
-          const page = await fetchOrders(accessToken, shopCipher, startTs, endTs, 50, cursor)
-          allOrders = allOrders.concat(page.orders)
-          cursor = page.nextCursor
-        } while (cursor)
+        const WINDOW = 30 * 24 * 60 * 60 // 30 days in seconds
+        let windowStart = startTs
+        while (windowStart < endTs) {
+          const windowEnd = Math.min(windowStart + WINDOW, endTs)
+          let cursor: string | undefined
+          do {
+            const page = await fetchOrders(accessToken, shopCipher, windowStart, windowEnd, 50, cursor)
+            allOrders = allOrders.concat(page.orders)
+            cursor = page.nextCursor
+          } while (cursor)
+          windowStart = windowEnd
+        }
 
         // Upsert orders
         for (const order of allOrders) {
