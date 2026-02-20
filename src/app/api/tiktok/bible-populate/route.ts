@@ -75,13 +75,26 @@ export async function POST(request: NextRequest) {
     const timezone = connData?.timezone || 'America/Los_Angeles'
 
     // Fetch all TikTok orders in date range
-    const { data: orders } = await supabase
-      .from('tiktok_orders')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('connection_id', connectionId)
-      .gte('order_create_time', `${startDate}T00:00:00Z`)
-      .lte('order_create_time', `${endDate}T23:59:59Z`)
+    // Fetch all orders — must override Supabase default 1000-row limit
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let allOrders: any[] = []
+    let from = 0
+    const PAGE = 1000
+    while (true) {
+      const { data: page } = await supabase
+        .from('tiktok_orders')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('connection_id', connectionId)
+        .gte('order_create_time', `${startDate}T00:00:00Z`)
+        .lte('order_create_time', `${endDate}T23:59:59Z`)
+        .range(from, from + PAGE - 1)
+      if (!page || page.length === 0) break
+      allOrders = allOrders.concat(page)
+      if (page.length < PAGE) break
+      from += PAGE
+    }
+    const orders = allOrders
 
     // Fetch affiliate orders in date range
     const { data: affOrders } = await supabase
