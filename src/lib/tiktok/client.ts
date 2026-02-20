@@ -74,21 +74,12 @@ export async function getAccessToken(authCode: string): Promise<TikTokTokens> {
   const appKey = getAppKey()
   const appSecret = getAppSecret()
   
-  const path = '/api/v2/token/get'
-  const timestamp = Math.floor(Date.now() / 1000).toString()
-  const queryParams: Record<string, string> = {
-    app_key: appKey,
-    app_secret: appSecret,
-    auth_code: authCode,
-    grant_type: 'authorized_code',
-    timestamp,
-  }
-  
-  const sign = generateSign(path, queryParams)
-  queryParams.sign = sign
-  
-  const url = new URL(path, TIKTOK_API_BASE)
-  Object.entries(queryParams).forEach(([k, v]) => url.searchParams.set(k, v))
+  // Token endpoint is on auth.tiktok-shops.com, NOT on open-api
+  const url = new URL('https://auth.tiktok-shops.com/api/v2/token/get')
+  url.searchParams.set('app_key', appKey)
+  url.searchParams.set('app_secret', appSecret)
+  url.searchParams.set('auth_code', authCode)
+  url.searchParams.set('grant_type', 'authorized_code')
   
   const res = await fetch(url.toString(), { method: 'GET' })
   const data = await res.json()
@@ -107,21 +98,12 @@ export async function refreshAccessToken(refreshToken: string): Promise<TikTokTo
   const appKey = getAppKey()
   const appSecret = getAppSecret()
   
-  const path = '/api/v2/token/refresh'
-  const timestamp = Math.floor(Date.now() / 1000).toString()
-  const queryParams: Record<string, string> = {
-    app_key: appKey,
-    app_secret: appSecret,
-    refresh_token: refreshToken,
-    grant_type: 'refresh_token',
-    timestamp,
-  }
-  
-  const sign = generateSign(path, queryParams)
-  queryParams.sign = sign
-  
-  const url = new URL(path, TIKTOK_API_BASE)
-  Object.entries(queryParams).forEach(([k, v]) => url.searchParams.set(k, v))
+  // Token refresh endpoint is on auth.tiktok-shops.com
+  const url = new URL('https://auth.tiktok-shops.com/api/v2/token/refresh')
+  url.searchParams.set('app_key', appKey)
+  url.searchParams.set('app_secret', appSecret)
+  url.searchParams.set('refresh_token', refreshToken)
+  url.searchParams.set('grant_type', 'refresh_token')
   
   const res = await fetch(url.toString(), { method: 'GET' })
   const data = await res.json()
