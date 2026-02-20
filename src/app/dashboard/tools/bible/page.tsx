@@ -570,9 +570,7 @@ export default function BiblePage() {
   , [entries, allUnits, products])
 
   // ── Editable Cell ──
-  const EditableCell = ({ rowIdx, colKey, value, isText = false }: {
-    rowIdx: number; colKey: string; value: number | string; isText?: boolean
-  }) => {
+  const renderEditableCell = (rowIdx: number, colKey: string, value: number | string, isText = false) => {
     const isEditing = editingCell?.rowIdx === rowIdx && editingCell?.colKey === colKey
     const displayVal = isText
       ? (value || '—')
@@ -580,6 +578,7 @@ export default function BiblePage() {
 
     return (
       <td
+        key={colKey}
         className={`
           px-3 py-2 text-sm border-r border-white/[0.04] cursor-pointer transition-colors duration-100
           ${isText ? 'text-left' : 'text-right'}
@@ -589,7 +588,7 @@ export default function BiblePage() {
       >
         {isEditing ? (
           <input
-            key={`${rowIdx}-${colKey}-edit`}
+            key={`${rowIdx}-${colKey}-${String(value)}`}
             ref={el => { if (el) cellRefs.current.set(cellKey(rowIdx, colKey), el) }}
             type="text"
             inputMode={isText ? 'text' : 'decimal'}
@@ -632,7 +631,7 @@ export default function BiblePage() {
             `}
           />
         ) : (
-          <span className={`block tabular-nums ${isText ? '' : ''} ${typeof value === 'number' && value === 0 ? 'text-gray-600' : 'text-white'}`}>
+          <span className={`block tabular-nums ${typeof value === 'number' && value === 0 ? 'text-gray-600' : 'text-white'}`}>
             {displayVal}
           </span>
         )}
@@ -655,15 +654,14 @@ export default function BiblePage() {
   }
 
   // ── Units cell (integer editable) ──
-  const UnitsCell = ({ rowIdx, productId, entryId }: {
-    rowIdx: number; productId: string; entryId: string
-  }) => {
+  const renderUnitsCell = (rowIdx: number, productId: string, entryId: string) => {
     const colKey = `units_${productId}`
     const val = getUnitsForEntry(entryId, productId)
     const isEditing = editingCell?.rowIdx === rowIdx && editingCell?.colKey === colKey
 
     return (
       <td
+        key={colKey}
         className={`
           px-3 py-2 text-sm text-right border-r border-white/[0.04] cursor-pointer transition-colors duration-100
           ${isEditing ? '' : 'hover:bg-white/[0.04]'}
@@ -672,7 +670,7 @@ export default function BiblePage() {
       >
         {isEditing ? (
           <input
-            key={`${rowIdx}-${colKey}-unit-edit`}
+            key={`${rowIdx}-${colKey}-${val}`}
             ref={el => { if (el) cellRefs.current.set(cellKey(rowIdx, colKey), el) }}
             type="text"
             inputMode="numeric"
@@ -899,27 +897,25 @@ export default function BiblePage() {
                             <td className="px-3 py-2 text-sm font-medium sticky left-0 z-10 whitespace-nowrap" style={{ background: '#141414' }}>
                               <span className="text-white">{fmtDate(e.date)}</span>
                             </td>
-                            <EditableCell rowIdx={rowIdx} colKey="gross_revenue" value={e.gross_revenue} />
-                            <EditableCell rowIdx={rowIdx} colKey="refunds" value={e.refunds} />
-                            <EditableCell rowIdx={rowIdx} colKey="num_orders" value={e.num_orders} />
-                            {products.map(p => (
-                              <UnitsCell key={p.id} rowIdx={rowIdx} productId={p.id} entryId={e.id} />
-                            ))}
+                            {renderEditableCell(rowIdx, 'gross_revenue', e.gross_revenue)}
+                            {renderEditableCell(rowIdx, 'refunds', e.refunds)}
+                            {renderEditableCell(rowIdx, 'num_orders', e.num_orders)}
+                            {products.map(p => renderUnitsCell(rowIdx, p.id, e.id))}
                             <CalcCell value={getTotalUnits(e.id)} />
-                            <EditableCell rowIdx={rowIdx} colKey="platform_fee" value={e.platform_fee} />
-                            <EditableCell rowIdx={rowIdx} colKey="commissions" value={e.commissions} />
-                            <EditableCell rowIdx={rowIdx} colKey="ad_spend" value={getAdSpend(e)} />
+                            {renderEditableCell(rowIdx, 'platform_fee', e.platform_fee)}
+                            {renderEditableCell(rowIdx, 'commissions', e.commissions)}
+                            {renderEditableCell(rowIdx, 'ad_spend', getAdSpend(e))}
                             <CalcCell value={fmtPct(getAdSpendPct(e))} />
                             <CalcCell value={getProductCost(e.id)} prefix="€" />
-                            <EditableCell rowIdx={rowIdx} colKey="postage_pick_pack" value={e.postage_pick_pack} />
-                            <EditableCell rowIdx={rowIdx} colKey="pick_pack" value={e.pick_pack || 0} />
+                            {renderEditableCell(rowIdx, 'postage_pick_pack', e.postage_pick_pack)}
+                            {renderEditableCell(rowIdx, 'pick_pack', e.pick_pack || 0)}
                             <td className={`px-3 py-2 text-sm text-right border-r border-white/[0.04] bg-white/[0.015] font-bold tabular-nums ${profitColor}`}>
                               {profit === 0 ? '—' : `€${fmt(profit)}`}
                             </td>
                             <td className={`px-3 py-2 text-sm text-right border-r border-white/[0.04] bg-white/[0.015] font-bold tabular-nums ${profitColor}`}>
                               {profit === 0 ? '—' : fmtPct(profitPct)}
                             </td>
-                            <EditableCell rowIdx={rowIdx} colKey="key_changes" value={e.key_changes || ''} isText />
+                            {renderEditableCell(rowIdx, 'key_changes', e.key_changes || '', true)}
                           </tr>
                         )
                       })}
