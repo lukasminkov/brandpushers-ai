@@ -23,9 +23,6 @@ export async function GET(request: NextRequest) {
     // Exchange code for tokens
     const tokens = await getAccessToken(code)
     
-    // Get authorized shops
-    const shops = await getAuthorizedShops(tokens.access_token)
-    
     // Store in Supabase (using service role to bypass RLS)
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -35,33 +32,42 @@ export async function GET(request: NextRequest) {
     const tokenExpiresAt = new Date(Date.now() + tokens.access_token_expire_in * 1000)
     const refreshExpiresAt = new Date(Date.now() + tokens.refresh_token_expire_in * 1000)
     
-    // Store connection for each authorized shop
-    for (const shop of shops) {
-      await supabase
-        .from('tiktok_connections')
-        .upsert({
-          user_id: userId,
-          shop_id: shop.id,
-          shop_cipher: shop.cipher,
-          shop_name: shop.name,
-          region: shop.region,
-          access_token: tokens.access_token,
-          refresh_token: tokens.refresh_token,
-          token_expires_at: tokenExpiresAt.toISOString(),
-          refresh_token_expires_at: refreshExpiresAt.toISOString(),
-          connected_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        }, {
-          onConflict: 'user_id,shop_id',
-        })
+    // Try to get authorized shops (may fail if scope not granted yet)
+    let shops: { id: string; cipher: string; name: string; region: string }[] = []
+    try {
+      shops = await getAuthorizedShops(tokens.access_token)
+    } catch (shopErr) {
+      console.warn('Could not fetch shops (scope may not be granted):', shopErr)
     }
     
-    // If no shops found, store connection without shop info
-    if (shops.length === 0) {
+    if (shops.length > 0) {
+      // Store connection for each authorized shop
+      for (const shop of shops) {
+        await supabase
+          .from('tiktok_connections')
+          .upsert({
+            user_id: userId,
+            shop_id: shop.id,
+            shop_cipher: shop.cipher,
+            shop_name: shop.name,
+            region: shop.region,
+            access_token: tokens.access_token,
+            refresh_token: tokens.refresh_token,
+            token_expires_at: tokenExpiresAt.toISOString(),
+            refresh_token_expires_at: refreshExpiresAt.toISOString(),
+            connected_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }, {
+            onConflict: 'user_id,shop_id',
+          })
+      }
+    } else {
+      // Store connection without shop info — will populate on first sync
       await supabase
         .from('tiktok_connections')
         .insert({
           user_id: userId,
+          shop_name: 'TikTok Shop',
           access_token: tokens.access_token,
           refresh_token: tokens.refresh_token,
           token_expires_at: tokenExpiresAt.toISOString(),
