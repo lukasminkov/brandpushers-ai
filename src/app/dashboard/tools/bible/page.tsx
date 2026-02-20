@@ -109,95 +109,95 @@ const getPlatformFee = (settings: BibleSettings, platform: Platform) => {
   return settings.shopify_fee
 }
 
-// ── Inline Input (stable component — never remounts while typing) ──
-// Uses refs for callbacks so the component never re-renders due to parent callback changes.
-const InlineInput = React.memo(function InlineInput({ initialValue, onCommitRef, onNavRef, isText = false }: {
+// ── Floating Editor ────────────────────────────────────────────────
+// A single <input> that floats OUTSIDE the table and positions itself
+// over the active cell via fixed positioning. Table re-renders cannot
+// affect this input because it lives in a completely separate DOM branch.
+// This is the same pattern Google Sheets uses.
+function FloatingEditor({ cellEl, initialValue, isText, onCommit, onNav }: {
+  cellEl: HTMLTableCellElement
   initialValue: string
-  onCommitRef: React.RefObject<(val: string) => void>
-  onNavRef: React.RefObject<(dir: 'next' | 'prev' | 'down' | 'up' | 'cancel') => void>
-  isText?: boolean
+  isText: boolean
+  onCommit: (val: string) => void
+  onNav: (dir: 'next' | 'prev' | 'down' | 'up' | 'cancel') => void
 }) {
-  const ref = useRef<HTMLInputElement>(null)
-  const committed = useRef(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const committedRef = useRef(false)
+  const [pos, setPos] = useState({ top: 0, left: 0, width: 0, height: 0 })
 
+  // Position over cell and focus
   useEffect(() => {
-    const el = ref.current
-    if (el) { el.focus(); el.select() }
-  }, [])
+    committedRef.current = false
+    const rect = cellEl.getBoundingClientRect()
+    setPos({ top: rect.top, left: rect.left, width: rect.width, height: rect.height })
+    const el = inputRef.current
+    if (el) {
+      el.value = initialValue
+      el.focus()
+      el.select()
+    }
+  }, [cellEl, initialValue])
+
+  // Reposition on scroll/resize
+  useEffect(() => {
+    const reposition = () => {
+      const rect = cellEl.getBoundingClientRect()
+      setPos({ top: rect.top, left: rect.left, width: rect.width, height: rect.height })
+    }
+    // Listen on the scrollable table container
+    const scrollParent = cellEl.closest('.overflow-x-auto')
+    scrollParent?.addEventListener('scroll', reposition)
+    window.addEventListener('resize', reposition)
+    window.addEventListener('scroll', reposition, true)
+    return () => {
+      scrollParent?.removeEventListener('scroll', reposition)
+      window.removeEventListener('resize', reposition)
+      window.removeEventListener('scroll', reposition, true)
+    }
+  }, [cellEl])
 
   const commit = useCallback(() => {
-    if (committed.current) return
-    committed.current = true
-    onCommitRef.current(ref.current?.value ?? initialValue)
-  }, [onCommitRef, initialValue])
+    if (committedRef.current) return
+    committedRef.current = true
+    onCommit(inputRef.current?.value ?? initialValue)
+  }, [onCommit, initialValue])
 
   return (
     <input
-      ref={ref}
+      ref={inputRef}
       type="text"
       inputMode={isText ? 'text' : 'decimal'}
-      defaultValue={initialValue}
       onBlur={() => { commit() }}
       onKeyDown={e => {
         if (e.key === 'Tab') {
-          e.preventDefault(); commit(); onNavRef.current(e.shiftKey ? 'prev' : 'next')
+          e.preventDefault(); commit(); onNav(e.shiftKey ? 'prev' : 'next')
         } else if (e.key === 'Enter') {
-          e.preventDefault(); commit(); onNavRef.current('down')
+          e.preventDefault(); commit(); onNav('down')
         } else if (e.key === 'Escape') {
-          e.preventDefault(); committed.current = true; onNavRef.current('cancel')
+          e.preventDefault(); committedRef.current = true; onNav('cancel')
         } else if (!isText && e.key === 'ArrowDown') {
-          e.preventDefault(); commit(); onNavRef.current('down')
+          e.preventDefault(); commit(); onNav('down')
         } else if (!isText && e.key === 'ArrowUp') {
-          e.preventDefault(); commit(); onNavRef.current('up')
+          e.preventDefault(); commit(); onNav('up')
         }
       }}
+      style={{
+        position: 'fixed',
+        top: pos.top,
+        left: pos.left,
+        width: pos.width,
+        height: pos.height,
+        zIndex: 9999,
+      }}
       className={`
-        w-full bg-transparent text-white outline-none px-1 py-0.5 rounded transition-all
-        ring-2 ring-[#F24822]/60 ring-offset-1 ring-offset-[#141414]
+        bg-[#141414] text-white outline-none px-3 py-2 text-sm
+        ring-2 ring-[#F24822]/60
         ${isText ? 'text-left' : 'text-right'}
         [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none
       `}
     />
   )
-})
-
-// ── Editable Cell (proper component with React.memo to prevent re-renders) ──
-const EditableCell = React.memo(function EditableCell({ rowIdx, colKey, displayValue, rawValue, isEditing, editValue, isText, onClickEdit, onCommitRef, onNavRef }: {
-  rowIdx: number
-  colKey: string
-  displayValue: string
-  rawValue: number | string
-  isEditing: boolean
-  editValue: string
-  isText?: boolean
-  onClickEdit: (rowIdx: number, colKey: string) => void
-  onCommitRef: React.RefObject<(val: string) => void>
-  onNavRef: React.RefObject<(dir: 'next' | 'prev' | 'down' | 'up' | 'cancel') => void>
-}) {
-  return (
-    <td
-      className={`
-        px-3 py-2 text-sm border-r border-white/[0.04] cursor-pointer transition-colors duration-100
-        ${isText ? 'text-left' : 'text-right'}
-        ${isEditing ? '' : 'hover:bg-white/[0.04]'}
-      `}
-      onClick={() => { if (!isEditing) onClickEdit(rowIdx, colKey) }}
-    >
-      {isEditing ? (
-        <InlineInput
-          initialValue={editValue}
-          isText={isText}
-          onCommitRef={onCommitRef}
-          onNavRef={onNavRef}
-        />
-      ) : (
-        <span className={`block tabular-nums ${typeof rawValue === 'number' && rawValue === 0 ? 'text-gray-600' : 'text-white'}`}>
-          {displayValue}
-        </span>
-      )}
-    </td>
-  )
-})
+}
 
 // ── Calendar Picker ────────────────────────────────────────────────
 function CalendarPicker({ usedDates, onSelect, onClose }: {
@@ -386,12 +386,11 @@ export default function BiblePage() {
   const [showSettings, setShowSettings] = useState(false)
   const [settings, setSettings] = useState<BibleSettings>(DEFAULT_SETTINGS)
 
-  // Spreadsheet editing state
+  // Spreadsheet editing state — floating editor approach
   const [editingCell, setEditingCell] = useState<CellAddr | null>(null)
   const [editValue, setEditValue] = useState('')
-  const [preEditValue, setPreEditValue] = useState('')
-  const cellRefs = useRef<Map<string, HTMLInputElement>>(new Map())
-  const isNavigating = useRef(false)
+  const [activeCellEl, setActiveCellEl] = useState<HTMLTableCellElement | null>(null)
+  const cellRegistry = useRef<Map<string, HTMLTableCellElement>>(new Map())
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
   const tableEndRef = useRef<HTMLTableRowElement>(null)
 
@@ -552,12 +551,7 @@ export default function BiblePage() {
   }, [entries, saveEntry, saveUnits, settings, platform])
 
   // ── Start editing a cell ──
-  const startEdit = useCallback((rowIdx: number, colKey: string) => {
-    // Commit previous edit first
-    if (editingCell) {
-      commitEdit(editingCell, editValue)
-    }
-
+  const startEdit = useCallback((rowIdx: number, colKey: string, tdEl?: HTMLTableCellElement) => {
     const entry = entries[rowIdx]
     if (!entry) return
 
@@ -573,38 +567,43 @@ export default function BiblePage() {
       val = n === 0 ? '' : String(n)
     }
 
+    // Find the cell DOM element
+    const el = tdEl || cellRegistry.current.get(cellKey(rowIdx, colKey))
+    if (!el) return
+
     setEditingCell({ rowIdx, colKey })
     setEditValue(val)
-    setPreEditValue(val)
-
-    // Focus input after render
-    requestAnimationFrame(() => {
-      const input = cellRefs.current.get(cellKey(rowIdx, colKey))
-      if (input) {
-        input.focus()
-        input.select()
-      }
-    })
-  }, [editingCell, editValue, entries, allUnits, commitEdit])
+    setActiveCellEl(el)
+  }, [entries, allUnits])
 
   // ── Navigate to adjacent cell ──
+  // Uses refs so the floating editor's onNav callback never goes stale
+  const entriesRef = useRef(entries)
+  entriesRef.current = entries
+  const editableColKeysRef = useRef(editableColKeys)
+  editableColKeysRef.current = editableColKeys
+  const startEditRef = useRef(startEdit)
+  startEditRef.current = startEdit
+  const commitEditRef = useRef(commitEdit)
+  commitEditRef.current = commitEdit
+
   const navigateCell = useCallback((fromRow: number, fromCol: string, direction: 'next' | 'prev' | 'down' | 'up') => {
-    isNavigating.current = true
-    const colIdx = editableColKeys.indexOf(fromCol)
+    const cols = editableColKeysRef.current
+    const colIdx = cols.indexOf(fromCol)
 
     let targetRow = fromRow
     let targetColIdx = colIdx
 
     if (direction === 'next') {
       targetColIdx = colIdx + 1
-      if (targetColIdx >= editableColKeys.length) {
+      if (targetColIdx >= cols.length) {
         targetColIdx = 0
         targetRow = fromRow + 1
       }
     } else if (direction === 'prev') {
       targetColIdx = colIdx - 1
       if (targetColIdx < 0) {
-        targetColIdx = editableColKeys.length - 1
+        targetColIdx = cols.length - 1
         targetRow = fromRow - 1
       }
     } else if (direction === 'down') {
@@ -613,20 +612,18 @@ export default function BiblePage() {
       targetRow = fromRow - 1
     }
 
-    if (targetRow < 0 || targetRow >= entries.length) {
-      // Out of bounds — just commit and stop
-      commitEdit({ rowIdx: fromRow, colKey: fromCol }, editValue)
+    if (targetRow < 0 || targetRow >= entriesRef.current.length) {
       setEditingCell(null)
-      isNavigating.current = false
+      setActiveCellEl(null)
       return
     }
 
-    const targetCol = editableColKeys[targetColIdx]
-    commitEdit({ rowIdx: fromRow, colKey: fromCol }, editValue)
-    startEdit(targetRow, targetCol)
-
-    setTimeout(() => { isNavigating.current = false }, 50)
-  }, [editableColKeys, entries.length, editValue, commitEdit, startEdit])
+    const targetCol = cols[targetColIdx]
+    // Use requestAnimationFrame to let the current commit settle
+    requestAnimationFrame(() => {
+      startEditRef.current(targetRow, targetCol)
+    })
+  }, []) // stable — uses refs
 
   // ── Calculated values ──
   const getUnitsForEntry = (entryId: string, productId: string) =>
@@ -692,51 +689,42 @@ export default function BiblePage() {
   // ── Currency symbol ──
   const cs = getCurrencySymbol(settings)
 
-  // ── Stable callback refs for InlineInput (prevents re-renders when callbacks change) ──
-  const commitEditRef = useRef(commitEdit)
-  commitEditRef.current = commitEdit
-  const navigateCellRef = useRef(navigateCell)
-  navigateCellRef.current = navigateCell
-  const startEditRef = useRef(startEdit)
-  startEditRef.current = startEdit
+  // ── Floating editor callbacks (stable via refs) ──
   const editingCellRef = useRef(editingCell)
   editingCellRef.current = editingCell
-  const editValueRef = useRef(editValue)
-  editValueRef.current = editValue
+  const navigateCellRef = useRef(navigateCell)
+  navigateCellRef.current = navigateCell
 
-  // Stable onCommit ref — commits the value and clears editing
-  const onCommitRef = useRef((val: string) => {
+  // Called when the floating editor commits a value
+  const handleFloatingCommit = useCallback((val: string) => {
     const ec = editingCellRef.current
     if (ec) {
       commitEditRef.current(ec, val)
-      setEditingCell(null)
     }
-  })
-  onCommitRef.current = (val: string) => {
-    const ec = editingCellRef.current
-    if (ec) {
-      commitEditRef.current(ec, val)
-      setEditingCell(null)
-    }
-  }
+    setEditingCell(null)
+    setActiveCellEl(null)
+  }, [])
 
-  // Stable onNav ref — navigates or cancels
-  const onNavRef = useRef((dir: 'next' | 'prev' | 'down' | 'up' | 'cancel') => {
+  // Called when the floating editor navigates
+  const handleFloatingNav = useCallback((dir: 'next' | 'prev' | 'down' | 'up' | 'cancel') => {
     const ec = editingCellRef.current
     if (!ec) return
-    if (dir === 'cancel') { setEditingCell(null); return }
+    if (dir === 'cancel') {
+      setEditingCell(null)
+      setActiveCellEl(null)
+      return
+    }
+    // Commit current value first — read from the input directly (handled by FloatingEditor's commit)
     navigateCellRef.current(ec.rowIdx, ec.colKey, dir)
-  })
-  onNavRef.current = (dir: 'next' | 'prev' | 'down' | 'up' | 'cancel') => {
-    const ec = editingCellRef.current
-    if (!ec) return
-    if (dir === 'cancel') { setEditingCell(null); return }
-    navigateCellRef.current(ec.rowIdx, ec.colKey, dir)
-  }
+  }, [])
 
-  // Stable click handler
-  const onClickEdit = useCallback((rowIdx: number, colKey: string) => {
-    startEditRef.current(rowIdx, colKey)
+  // ── Helper: register a cell td and handle click ──
+  const registerCell = useCallback((rowIdx: number, colKey: string) => (el: HTMLTableCellElement | null) => {
+    if (el) cellRegistry.current.set(cellKey(rowIdx, colKey), el)
+  }, [])
+
+  const handleCellClick = useCallback((rowIdx: number, colKey: string, e: React.MouseEvent<HTMLTableCellElement>) => {
+    startEditRef.current(rowIdx, colKey, e.currentTarget)
   }, [])
 
   // ── Helper: get display value for a cell ──
@@ -744,6 +732,10 @@ export default function BiblePage() {
     if (isText) return (value || '—') as string
     return typeof value === 'number' ? (value === 0 ? '—' : fmt(value)) : String(value)
   }
+
+  // ── Is a specific cell being edited? ──
+  const isCellEditing = (rowIdx: number, colKey: string) =>
+    editingCell?.rowIdx === rowIdx && editingCell?.colKey === colKey
 
   // ── Calculated cell (read-only) ──
   const CalcCell = ({ value, prefix = '', color }: {
