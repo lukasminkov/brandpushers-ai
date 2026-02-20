@@ -589,6 +589,7 @@ export default function BiblePage() {
       >
         {isEditing ? (
           <input
+            key={`${rowIdx}-${colKey}-edit`}
             ref={el => { if (el) cellRefs.current.set(cellKey(rowIdx, colKey), el) }}
             type="text"
             inputMode={isText ? 'text' : 'decimal'}
@@ -601,28 +602,25 @@ export default function BiblePage() {
               setEditingCell(null)
             }}
             onKeyDown={e => {
+              const getVal = () => cellRefs.current.get(cellKey(rowIdx, colKey))?.value ?? ''
               if (e.key === 'Tab') {
                 e.preventDefault()
-                const input = cellRefs.current.get(cellKey(rowIdx, colKey))
-                setEditValue(input?.value ?? '')
+                setEditValue(getVal())
                 navigateCell(rowIdx, colKey, e.shiftKey ? 'prev' : 'next')
               } else if (e.key === 'Enter') {
                 e.preventDefault()
-                const input = cellRefs.current.get(cellKey(rowIdx, colKey))
-                setEditValue(input?.value ?? '')
+                setEditValue(getVal())
                 navigateCell(rowIdx, colKey, 'down')
               } else if (e.key === 'Escape') {
                 e.preventDefault()
                 setEditingCell(null)
               } else if (e.key === 'ArrowDown' && !isText) {
                 e.preventDefault()
-                const input = cellRefs.current.get(cellKey(rowIdx, colKey))
-                setEditValue(input?.value ?? '')
+                setEditValue(getVal())
                 navigateCell(rowIdx, colKey, 'down')
               } else if (e.key === 'ArrowUp' && !isText) {
                 e.preventDefault()
-                const input = cellRefs.current.get(cellKey(rowIdx, colKey))
-                setEditValue(input?.value ?? '')
+                setEditValue(getVal())
                 navigateCell(rowIdx, colKey, 'up')
               }
             }}
@@ -674,6 +672,7 @@ export default function BiblePage() {
       >
         {isEditing ? (
           <input
+            key={`${rowIdx}-${colKey}-unit-edit`}
             ref={el => { if (el) cellRefs.current.set(cellKey(rowIdx, colKey), el) }}
             type="text"
             inputMode="numeric"
@@ -685,28 +684,25 @@ export default function BiblePage() {
               setEditingCell(null)
             }}
             onKeyDown={e => {
+              const getVal = () => cellRefs.current.get(cellKey(rowIdx, colKey))?.value ?? ''
               if (e.key === 'Tab') {
                 e.preventDefault()
-                const input = cellRefs.current.get(cellKey(rowIdx, colKey))
-                setEditValue(input?.value ?? '')
+                setEditValue(getVal())
                 navigateCell(rowIdx, colKey, e.shiftKey ? 'prev' : 'next')
               } else if (e.key === 'Enter') {
                 e.preventDefault()
-                const input = cellRefs.current.get(cellKey(rowIdx, colKey))
-                setEditValue(input?.value ?? '')
+                setEditValue(getVal())
                 navigateCell(rowIdx, colKey, 'down')
               } else if (e.key === 'Escape') {
                 e.preventDefault()
                 setEditingCell(null)
               } else if (e.key === 'ArrowDown') {
                 e.preventDefault()
-                const input = cellRefs.current.get(cellKey(rowIdx, colKey))
-                setEditValue(input?.value ?? '')
+                setEditValue(getVal())
                 navigateCell(rowIdx, colKey, 'down')
               } else if (e.key === 'ArrowUp') {
                 e.preventDefault()
-                const input = cellRefs.current.get(cellKey(rowIdx, colKey))
-                setEditValue(input?.value ?? '')
+                setEditValue(getVal())
                 navigateCell(rowIdx, colKey, 'up')
               }
             }}
