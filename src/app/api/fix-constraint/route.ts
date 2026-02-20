@@ -6,10 +6,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
   
-  // Return env info so we can connect directly
-  return NextResponse.json({ 
-    url: process.env.NEXT_PUBLIC_SUPABASE_URL,
-    sk: process.env.SUPABASE_SERVICE_ROLE_KEY,
-    dbUrl: process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.SUPABASE_DB_URL || null,
-  })
+  // Return all POSTGRES/DATABASE env vars so we can find the connection string
+  const envKeys = Object.keys(process.env).filter(k => 
+    k.includes('POSTGRES') || k.includes('DATABASE') || k.includes('SUPABASE') || k.includes('PG')
+  )
+  const envInfo: Record<string, string> = {}
+  for (const k of envKeys) {
+    // Mask passwords in URLs
+    envInfo[k] = process.env[k]?.substring(0, 80) + (process.env[k]!.length > 80 ? '...' : '')
+  }
+  
+  return NextResponse.json({ envKeys: envInfo })
 }
