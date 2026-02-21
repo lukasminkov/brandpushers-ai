@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { getAccessToken, getAuthorizedShops } from '@/lib/tiktok/client'
+import { getAccessToken, getAuthorizedShops, tokenExpiryToDate } from '@/lib/tiktok/client'
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
@@ -29,8 +29,8 @@ export async function GET(request: NextRequest) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     )
     
-    const tokenExpiresAt = new Date(Date.now() + tokens.access_token_expire_in * 1000)
-    const refreshExpiresAt = new Date(Date.now() + tokens.refresh_token_expire_in * 1000)
+    const tokenExpiresAt = tokenExpiryToDate(tokens.access_token_expire_in)
+    const refreshExpiresAt = tokenExpiryToDate(tokens.refresh_token_expire_in)
     
     // Try to get authorized shops (may fail if scope not granted yet)
     let shops: { id: string; cipher: string; name: string; region: string }[] = []

@@ -3,7 +3,7 @@
  * Handles auto-refresh of tokens before they expire
  */
 import { createClient } from '@supabase/supabase-js'
-import { refreshAccessToken, type TikTokTokens } from './client'
+import { refreshAccessToken, tokenExpiryToDate, type TikTokTokens } from './client'
 
 function getServiceClient() {
   return createClient(
@@ -50,8 +50,8 @@ export async function getValidToken(connectionId: string): Promise<{
     try {
       const tokens: TikTokTokens = await refreshAccessToken(connection.refresh_token)
       
-      const newExpiresAt = new Date(Date.now() + tokens.access_token_expire_in * 1000)
-      const newRefreshExpiresAt = new Date(Date.now() + tokens.refresh_token_expire_in * 1000)
+      const newExpiresAt = tokenExpiryToDate(tokens.access_token_expire_in)
+      const newRefreshExpiresAt = tokenExpiryToDate(tokens.refresh_token_expire_in)
       
       await supabase
         .from('tiktok_connections')

@@ -10,8 +10,22 @@ const TIKTOK_AUTH_BASE = 'https://services.tiktokshop.com'
 export interface TikTokTokens {
   access_token: string
   refresh_token: string
-  access_token_expire_in: number // seconds
-  refresh_token_expire_in: number
+  access_token_expire_in: number // Unix timestamp in seconds (NOT duration)
+  refresh_token_expire_in: number // Unix timestamp in seconds (NOT duration)
+}
+
+/**
+ * Convert TikTok's expire_in field to a Date.
+ * TikTok returns Unix timestamps (seconds since epoch), NOT durations.
+ * We detect which it is: if value > 1e9, it's a timestamp; otherwise duration.
+ */
+export function tokenExpiryToDate(expireIn: number): Date {
+  if (expireIn > 1_000_000_000) {
+    // Unix timestamp in seconds
+    return new Date(expireIn * 1000)
+  }
+  // Fallback: treat as duration in seconds
+  return new Date(Date.now() + expireIn * 1000)
 }
 
 export interface TikTokShop {
