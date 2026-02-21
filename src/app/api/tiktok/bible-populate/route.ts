@@ -154,7 +154,15 @@ export async function POST(request: NextRequest) {
       variantUnits: Map<string, number>
     }>()
 
+    // TikTok order statuses to exclude from order count and GMV
+    const CANCELLED_STATUSES = new Set(['CANCELLED', 'CANCEL', 'cancelled', 'cancel'])
+
     for (const order of orders || []) {
+      const orderStatus = (order.order_status || '') as string
+
+      // Skip cancelled orders entirely — they don't count in TikTok analytics
+      if (CANCELLED_STATUSES.has(orderStatus)) continue
+
       // Convert order time to shop timezone for date grouping
       const date = toDateInTimezone(order.order_create_time, timezone)
       if (!dailyMap.has(date)) {
