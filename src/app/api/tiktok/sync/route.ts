@@ -274,11 +274,15 @@ async function performSync(
       try {
         let allTransactions: Record<string, unknown>[] = []
         let cursor: string | undefined
+        // Limit loop to avoid infinite pagination on error
+        let pageCount = 0;
         do {
-          const page = await fetchStatementTransactions(accessToken, shopCipher, startTs, endTs, 100, cursor)
-          allTransactions = allTransactions.concat(page.transactions)
+          pageCount++;
+          // Pass pageSize=20 (smaller batches) to reduce timeout risk
+          const page = await fetchStatementTransactions(accessToken, shopCipher, startTs, endTs, 50, cursor)
+          allTransactions = allTransactions.concat(page.transactions || [])
           cursor = page.nextCursor
-        } while (cursor)
+        } while (cursor && pageCount < 50)
 
         // Log transaction types/fields to discover ad spend data
         const txTypes = new Set<string>()
@@ -342,7 +346,8 @@ async function performSync(
         console.log(`Ad spend from statements: ${adSpendTotal}`)
       } catch (stErr) {
         console.warn('Statement transaction sync skipped:', stErr)
-        results.statement_transactions = 'skipped'
+        // Explicitly mark as failed in results so we know it's not just "0 transactions"
+        results.statement_transactions = `failed: ${stErr instanceof Error ? stErr.message : String(stErr)}`
       }
     }
 

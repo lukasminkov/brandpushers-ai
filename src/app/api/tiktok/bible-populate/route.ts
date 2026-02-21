@@ -196,12 +196,18 @@ export async function POST(request: NextRequest) {
 
       // REAL commission data from TikTok Finance Statement Transactions API
       // These fields are populated by the sync route from /finance/202309/statement_transactions/search
+      // NOTE: If statement transactions API failed (40006), these will remain 0/null
+      // We check explicitly if they were synced
       if (order.commission_synced) {
         day.platform_commission += parseFloat(order.platform_commission || 0)
         day.affiliate_commission += parseFloat(order.affiliate_commission || 0)
         day.transaction_fee += parseFloat(order.transaction_fee || 0)
         day.commissions_from_api += 1
       }
+      
+      // Fallback: If "Get Transactions by Order" was used (US/UK only), check 'order_transactions' JSONB column if it exists
+      // Assuming a future migration might add this if statement transactions fails
+      // For now, rely on commission_synced flag.
 
       // Product + variant units from order items
       const items = order.items as { product_id?: string; sku_id?: string; quantity?: number }[] || []
