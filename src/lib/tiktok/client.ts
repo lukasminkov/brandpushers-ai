@@ -361,6 +361,50 @@ export async function fetchOrderDetails(
 }
 
 /**
+ * Fetch finance statement transactions (per-order commission breakdowns).
+ * Returns order-level financial details including platform_commission, affiliate_commission, etc.
+ */
+export async function fetchStatementTransactions(
+  accessToken: string,
+  shopCipher: string,
+  startTime: number,
+  endTime: number,
+  pageSize = 100,
+  cursor?: string
+): Promise<{ transactions: Record<string, unknown>[]; nextCursor?: string }> {
+  const queryExtra: Record<string, string> = {
+    page_size: pageSize.toString(),
+    ...(cursor ? { page_token: cursor } : {}),
+  }
+
+  const body: Record<string, unknown> = {
+    statement_time_ge: startTime,
+    statement_time_lt: endTime,
+    sort_field: 'statement_time',
+    sort_order: 'DESC',
+  }
+
+  try {
+    const data = await apiRequest(
+      '/finance/202309/statement_transactions/search',
+      'POST',
+      accessToken,
+      shopCipher,
+      queryExtra,
+      body
+    )
+
+    return {
+      transactions: (data.statement_transactions || []) as Record<string, unknown>[],
+      nextCursor: data.next_page_token as string | undefined,
+    }
+  } catch {
+    // Endpoint may not be available — fall back gracefully
+    return { transactions: [] }
+  }
+}
+
+/**
  * Fetch full product details (includes SKU sales_attributes with variant names)
  */
 export async function fetchProductDetail(

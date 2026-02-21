@@ -8,6 +8,7 @@ import {
   fetchOrderDetails,
   fetchAffiliateOrders,
   fetchSettlements,
+  fetchStatementTransactions,
   fetchProducts,
   fetchProductDetail,
   getAuthorizedShops,
