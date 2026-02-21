@@ -1,7 +1,7 @@
 'use client'
 import React, { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Plug, ShoppingBag, RefreshCw, Trash2, ExternalLink, CheckCircle, AlertCircle, Loader2, Clock } from 'lucide-react'
+import { Plug, ShoppingBag, RefreshCw, Trash2, ExternalLink, CheckCircle, AlertCircle, Loader2, Clock, LinkIcon } from 'lucide-react'
 
 interface TikTokConnection {
   id: string
@@ -242,11 +242,25 @@ export default function IntegrationsPage() {
                             Last sync {new Date(conn.last_sync_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                           </span>
                         )}
+                        {ts === 'expired' && <span className="text-red-400">Token expired — reconnect to continue syncing</span>}
+                        {ts === 'expiring' && <span className="text-yellow-400">Token expiring soon</span>}
                         {conn.sync_error && <span className="text-red-400">Error: {conn.sync_error}</span>}
                       </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0 ml-3">
+                    {ts !== 'valid' && (
+                      <button
+                        onClick={handleConnect}
+                        disabled={connecting}
+                        title="Reconnect — re-authenticate to get fresh tokens"
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer disabled:opacity-50"
+                        style={{ background: 'rgba(242,72,34,0.15)', color: '#F24822', border: '1px solid rgba(242,72,34,0.3)' }}
+                      >
+                        <LinkIcon size={12} />
+                        Reconnect
+                      </button>
+                    )}
                     <button
                       onClick={() => handleSync(conn.id)}
                       disabled={syncing === conn.id}
@@ -254,6 +268,14 @@ export default function IntegrationsPage() {
                       className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/5 transition-all cursor-pointer disabled:opacity-50"
                     >
                       {syncing === conn.id ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                    </button>
+                    <button
+                      onClick={handleConnect}
+                      disabled={connecting}
+                      title="Reconnect — re-authenticate with TikTok"
+                      className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-orange-400 hover:bg-orange-500/10 transition-all cursor-pointer disabled:opacity-50"
+                    >
+                      {connecting ? <Loader2 size={14} className="animate-spin" /> : <LinkIcon size={14} />}
                     </button>
                     <button
                       onClick={() => handleDisconnect(conn.id)}

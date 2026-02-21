@@ -476,15 +476,26 @@ async function performSync(
 
 export async function POST(request: NextRequest) {
   try {
-    // Auth check
-    const supabaseAuth = await createServerClient()
-    const { data: { user } } = await supabaseAuth.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    // Auth check — support service key bypass for automated syncs
+    const serviceKey = request.headers.get('x-service-key')
+    let userId: string
 
     const body = await request.json()
     const { connectionId, syncType = 'all', fullSync = false } = body
+
+    if (serviceKey === process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      if (!body.userId) {
+        return NextResponse.json({ error: 'userId required with service key' }, { status: 400 })
+      }
+      userId = body.userId
+    } else {
+      const supabaseAuth = await createServerClient()
+      const { data: { user } } = await supabaseAuth.auth.getUser()
+      if (!user) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      }
+      userId = user.id
+    }
 
     if (!connectionId) {
       return NextResponse.json({ error: 'connectionId required' }, { status: 400 })
@@ -531,7 +542,7 @@ export async function POST(request: NextRequest) {
 
     // Fire-and-forget: run sync in background via after()
     after(async () => {
-      await performSync(user.id, connectionId, syncType, startTs, endTs, startStr, endStr)
+      await performSync(userId, connectionId, syncType, startTs, endTs, startStr, endStr)
     })
 
     // Return immediately

@@ -57,11 +57,21 @@ function calculateOrderGMV(order: Record<string, unknown>): number {
  */
 export async function POST(request: NextRequest) {
   try {
-    const supabaseAuth = await createServerClient()
-    const { data: { user } } = await supabaseAuth.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const body = await request.json()
+    const serviceKey = request.headers.get('x-service-key')
+    let userId: string
 
-    const { connectionId, startDate, endDate, platformFeePercent = 9, commissionRate = 0, postagePerOrder = 0 } = await request.json()
+    if (serviceKey === process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      if (!body.userId) return NextResponse.json({ error: 'userId required with service key' }, { status: 400 })
+      userId = body.userId
+    } else {
+      const supabaseAuth = await createServerClient()
+      const { data: { user } } = await supabaseAuth.auth.getUser()
+      if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      userId = user.id
+    }
+
+    const { connectionId, startDate, endDate, platformFeePercent = 9, commissionRate = 0, postagePerOrder = 0 } = body
     if (!connectionId) return NextResponse.json({ error: 'connectionId required' }, { status: 400 })
 
     const supabase = getServiceClient()
@@ -84,7 +94,7 @@ export async function POST(request: NextRequest) {
       const { data: page } = await supabase
         .from('tiktok_orders')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .eq('connection_id', connectionId)
         .gte('order_create_time', `${startDate}T00:00:00Z`)
         .lte('order_create_time', `${endDate}T23:59:59Z`)
@@ -100,7 +110,7 @@ export async function POST(request: NextRequest) {
     const { data: affOrders } = await supabase
       .from('tiktok_affiliate_orders')
       .select('*')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .eq('connection_id', connectionId)
       .gte('order_create_time', `${startDate}T00:00:00Z`)
       .lte('order_create_time', `${endDate}T23:59:59Z`)
@@ -109,14 +119,14 @@ export async function POST(request: NextRequest) {
     const { data: settlements } = await supabase
       .from('tiktok_settlements')
       .select('*')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .eq('connection_id', connectionId)
 
     // Fetch product mappings
     const { data: tiktokProducts } = await supabase
       .from('tiktok_products')
       .select('product_id, bible_product_id')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .eq('connection_id', connectionId)
 
     const productMap = new Map<string, string>()
@@ -276,7 +286,7 @@ export async function POST(request: NextRequest) {
       const { data: existing } = await supabase
         .from('bible_daily_entries')
         .select('id')
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .eq('date', date)
         .eq('platform', 'tiktok_shop')
         .single()
@@ -303,7 +313,7 @@ export async function POST(request: NextRequest) {
         const { data: newEntry } = await supabase
           .from('bible_daily_entries')
           .insert({
-            user_id: user.id,
+            user_id: userId,
             date,
             platform: 'tiktok_shop',
             gross_revenue: day.gross_revenue,
@@ -331,7 +341,7 @@ export async function POST(request: NextRequest) {
             .upsert({
               entry_id: entryId,
               product_id: bibleProductId,
-              user_id: user.id,
+              user_id: userId,
               date,
               platform: 'tiktok_shop',
               units_sold: units,
@@ -349,7 +359,7 @@ export async function POST(request: NextRequest) {
                   entry_id: entryId,
                   variant_id: variantId,
                   product_id: variantInfo.productId,
-                  user_id: user.id,
+                  user_id: userId,
                   date,
                   platform: 'tiktok_shop',
                   units_sold: units,
@@ -364,7 +374,7 @@ export async function POST(request: NextRequest) {
       await supabase
         .from('bible_sync_log')
         .upsert({
-          user_id: user.id,
+          user_id: userId,
           sync_date: date,
           platform: 'tiktok_shop',
           estimated_data: {
