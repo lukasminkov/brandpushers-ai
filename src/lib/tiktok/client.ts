@@ -320,6 +320,33 @@ export async function fetchProducts(
 }
 
 /**
+ * Fetch full order details by IDs (batch up to 50).
+ * The search endpoint only returns basic info — this gets line_items, payment, etc.
+ */
+export async function fetchOrderDetails(
+  accessToken: string,
+  shopCipher: string,
+  orderIds: string[]
+): Promise<Record<string, unknown>[]> {
+  if (orderIds.length === 0) return []
+  
+  // TikTok GET /order/202309/orders accepts comma-separated IDs
+  const queryExtra: Record<string, string> = {
+    ids: orderIds.join(','),
+  }
+  
+  const data = await apiRequest(
+    '/order/202309/orders',
+    'GET',
+    accessToken,
+    shopCipher,
+    queryExtra
+  )
+  
+  return (data.orders || []) as Record<string, unknown>[]
+}
+
+/**
  * Fetch full product details (includes SKU sales_attributes with variant names)
  */
 export async function fetchProductDetail(

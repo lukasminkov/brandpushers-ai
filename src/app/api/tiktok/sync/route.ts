@@ -5,6 +5,7 @@ import { createClient as createServerClient } from '@/lib/supabase-server'
 import { getValidToken } from '@/lib/tiktok/token-manager'
 import {
   fetchOrders,
+  fetchOrderDetails,
   fetchAffiliateOrders,
   fetchSettlements,
   fetchProducts,
@@ -121,11 +122,31 @@ async function performSync(
         } while (cursor && pageNum < 20)
         windowStart = windowEnd
       }
-      console.log(`[sync] Total orders fetched: ${allOrders.length}`)
+      console.log(`[sync] Total order IDs fetched from search: ${allOrders.length}`)
 
-      // Batch upsert orders (100 at a time to avoid timeout)
-      const orderRows = allOrders.map(order => {
-        const items = ((order.line_items || order.order_line_list || []) as Record<string, unknown>[]).map(
+      // Search endpoint returns minimal data — fetch full details in batches of 50
+      let detailedOrders: Record<string, unknown>[] = []
+      const orderIds = allOrders.map(o => (o.id || o.order_id) as string).filter(Boolean)
+      console.log(`[sync] Fetching full details for ${orderIds.length} orders…`)
+      for (let i = 0; i < orderIds.length; i += 50) {
+        const batchIds = orderIds.slice(i, i + 50)
+        try {
+          const details = await fetchOrderDetails(accessToken, shopCipher, batchIds)
+          detailedOrders = detailedOrders.concat(details)
+          console.log(`[sync] Detail batch ${Math.floor(i/50)+1}: got ${details.length} orders`)
+        } catch (detailErr) {
+          console.error(`[sync] Detail batch failed for IDs ${i}-${i+50}:`, detailErr)
+          // Fall back to search results for this batch
+          const fallback = allOrders.filter(o => batchIds.includes((o.id || o.order_id) as string))
+          detailedOrders = detailedOrders.concat(fallback)
+        }
+      }
+      console.log(`[sync] Total detailed orders: ${detailedOrders.length}`)
+
+      // Batch upsert orders (100 at a time)
+      const orderRows = detailedOrders.map(order => {
+        const lineItems = (order.line_items || order.order_line_list || []) as Record<string, unknown>[]
+        const items = lineItems.map(
           (item: Record<string, unknown>) => ({
             product_id: item.product_id,
             product_name: item.product_name,
@@ -135,20 +156,21 @@ async function performSync(
             price: item.sale_price || item.original_price,
           })
         )
+        const payment = (order.payment || {}) as Record<string, unknown>
         return {
           user_id: userId,
           connection_id: connectionId,
-          order_id: order.id as string,
-          order_status: order.status as string,
-          payment_status: (order.payment as Record<string, unknown>)?.status as string,
-          total_amount: parseFloat(((order.payment as Record<string, unknown>)?.total_amount || '0') as string),
-          subtotal: parseFloat(((order.payment as Record<string, unknown>)?.sub_total || '0') as string),
+          order_id: (order.id || order.order_id) as string,
+          order_status: (order.status || order.order_status) as string,
+          payment_status: payment.status as string,
+          total_amount: parseFloat(String(payment.total_amount || payment.original_total_price || '0')),
+          subtotal: parseFloat(String(payment.sub_total || payment.subtotal || '0')),
           gmv: calculateGMV(order),
-          shipping_fee: parseFloat(((order.payment as Record<string, unknown>)?.shipping_fee || '0') as string),
-          platform_discount: parseFloat(((order.payment as Record<string, unknown>)?.platform_discount || '0') as string),
-          seller_discount: parseFloat(((order.payment as Record<string, unknown>)?.seller_discount || '0') as string),
+          shipping_fee: parseFloat(String(payment.shipping_fee || payment.shipping_fee_amount || '0')),
+          platform_discount: parseFloat(String(payment.platform_discount || '0')),
+          seller_discount: parseFloat(String(payment.seller_discount || '0')),
           refund_amount: parseFloat(String(order.refund_amount || '0')),
-          currency: ((order.payment as Record<string, unknown>)?.currency || 'USD') as string,
+          currency: (payment.currency || 'USD') as string,
           order_create_time: order.create_time ? new Date((order.create_time as number) * 1000).toISOString() : null,
           order_paid_time: order.paid_time ? new Date((order.paid_time as number) * 1000).toISOString() : null,
           items,
@@ -160,7 +182,16 @@ async function performSync(
       // Upsert in batches of 100
       for (let i = 0; i < orderRows.length; i += 100) {
         const batch = orderRows.slice(i, i + 100)
-        await supabase.from('tiktok_orders').upsert(batch, { onConflict: 'user_id,order_id' })
+        const { error: upsertErr } = await supabase.from('tiktok_orders').upsert(batch, { onConflict: 'user_id,order_id' })
+        if (upsertErr) {
+          console.error(`[sync] Order upsert batch error:`, upsertErr.message)
+          // If gmv column doesn't exist (migration 007 not run), retry without it
+          if (upsertErr.message?.includes('gmv')) {
+            const batchNoGmv = batch.map(({ gmv: _gmv, ...rest }) => rest)
+            const { error: retryErr } = await supabase.from('tiktok_orders').upsert(batchNoGmv, { onConflict: 'user_id,order_id' })
+            if (retryErr) console.error(`[sync] Order upsert retry error:`, retryErr.message)
+          }
+        }
       }
 
       results.orders = allOrders.length

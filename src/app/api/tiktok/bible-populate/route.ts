@@ -125,17 +125,22 @@ export async function POST(request: NextRequest) {
     }
 
     // Fetch variant mappings (sku_id -> variant_id + product_id)
+    // Wrapped in try/catch — table may not exist if migration 006 hasn't been run
     const bibleProductIds = [...new Set(productMap.values())]
-    const { data: variants } = bibleProductIds.length > 0
-      ? await supabase
-          .from('bible_product_variants')
-          .select('id, bible_product_id, sku_id')
-          .in('bible_product_id', bibleProductIds)
-      : { data: [] }
-
     const variantMap = new Map<string, { variantId: string; productId: string }>()
-    for (const v of variants || []) {
-      if (v.sku_id) variantMap.set(v.sku_id, { variantId: v.id, productId: v.bible_product_id })
+    try {
+      const { data: variants } = bibleProductIds.length > 0
+        ? await supabase
+            .from('bible_product_variants')
+            .select('id, bible_product_id, sku_id')
+            .in('bible_product_id', bibleProductIds)
+        : { data: [] }
+
+      for (const v of variants || []) {
+        if (v.sku_id) variantMap.set(v.sku_id, { variantId: v.id, productId: v.bible_product_id })
+      }
+    } catch (variantErr) {
+      console.warn('bible_product_variants table may not exist yet:', variantErr)
     }
 
     // Aggregate orders by day (converted to shop timezone)
@@ -276,21 +281,26 @@ export async function POST(request: NextRequest) {
             }, { onConflict: 'entry_id,product_id' })
         }
 
-        for (const [variantId, units] of day.variantUnits) {
-          const variantInfo = [...variantMap.values()].find(v => v.variantId === variantId)
-          if (variantInfo) {
-            await supabase
-              .from('bible_variant_daily_units')
-              .upsert({
-                entry_id: entryId,
-                variant_id: variantId,
-                product_id: variantInfo.productId,
-                user_id: user.id,
-                date,
-                platform: 'tiktok_shop',
-                units_sold: units,
-              }, { onConflict: 'entry_id,variant_id' })
+        // Variant units — table may not exist if migration 006 hasn't been run
+        try {
+          for (const [variantId, units] of day.variantUnits) {
+            const variantInfo = [...variantMap.values()].find(v => v.variantId === variantId)
+            if (variantInfo) {
+              await supabase
+                .from('bible_variant_daily_units')
+                .upsert({
+                  entry_id: entryId,
+                  variant_id: variantId,
+                  product_id: variantInfo.productId,
+                  user_id: user.id,
+                  date,
+                  platform: 'tiktok_shop',
+                  units_sold: units,
+                }, { onConflict: 'entry_id,variant_id' })
+            }
           }
+        } catch (variantUpsertErr) {
+          console.warn('Variant daily units upsert failed (migration 006 not run?):', variantUpsertErr)
         }
       }
 
