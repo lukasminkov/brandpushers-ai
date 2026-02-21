@@ -5,6 +5,7 @@ import {
   Plus, X, Trash2, Edit3, ChevronLeft, ChevronRight,
   Package, Settings, RefreshCw, Loader2, CheckCircle, Plug,
   ChevronDown, ChevronRight as ChevronRightIcon,
+  Calendar, Filter,
 } from 'lucide-react'
 import Link from 'next/link'
 import {
@@ -87,7 +88,139 @@ const CURRENCIES: { code: string; symbol: string; label: string }[] = [
 ]
 
 type Platform = 'tiktok_shop' | 'amazon' | 'shopify'
-type DateRange = '7d' | '30d' | 'month' | 'custom'
+type DatePreset = 'today' | '7d' | '4w' | '3m' | '12m' | 'mtd' | 'qtd' | 'ytd' | 'custom'
+type Granularity = 'daily' | 'weekly' | 'monthly'
+type ComparisonPeriod = 'none' | 'previous' | 'same_last_year'
+
+const DATE_PRESETS: { key: DatePreset; label: string }[] = [
+  { key: 'today', label: 'Today' },
+  { key: '7d', label: 'Last 7 days' },
+  { key: '4w', label: 'Last 4 weeks' },
+  { key: '3m', label: 'Last 3 months' },
+  { key: '12m', label: 'Last 12 months' },
+  { key: 'mtd', label: 'Month to date' },
+  { key: 'qtd', label: 'Quarter to date' },
+  { key: 'ytd', label: 'Year to date' },
+]
+
+const GRANULARITIES: { key: Granularity; label: string }[] = [
+  { key: 'daily', label: 'Daily' },
+  { key: 'weekly', label: 'Weekly' },
+  { key: 'monthly', label: 'Monthly' },
+]
+
+const COMPARISON_OPTIONS: { key: ComparisonPeriod; label: string }[] = [
+  { key: 'none', label: 'No comparison' },
+  { key: 'previous', label: 'Previous period' },
+  { key: 'same_last_year', label: 'Same period last year' },
+]
+
+function computeDateRange(preset: DatePreset, customFrom: string, customTo: string): { startDate: string; endDate: string } {
+  const now = new Date()
+  const toISO = (d: Date) => d.toISOString().slice(0, 10)
+  let s: Date, e: Date = now
+  switch (preset) {
+    case 'today': s = new Date(now); break
+    case '7d': s = new Date(now); s.setDate(s.getDate() - 6); break
+    case '4w': s = new Date(now); s.setDate(s.getDate() - 27); break
+    case '3m': s = new Date(now); s.setMonth(s.getMonth() - 3); break
+    case '12m': s = new Date(now); s.setFullYear(s.getFullYear() - 1); break
+    case 'mtd': s = new Date(now.getFullYear(), now.getMonth(), 1); break
+    case 'qtd': { const q = Math.floor(now.getMonth() / 3) * 3; s = new Date(now.getFullYear(), q, 1); break }
+    case 'ytd': s = new Date(now.getFullYear(), 0, 1); break
+    case 'custom':
+      s = customFrom ? new Date(customFrom) : new Date(now.getFullYear(), now.getMonth(), 1)
+      e = customTo ? new Date(customTo) : now
+      break
+    default: s = new Date(now); s.setDate(s.getDate() - 6); break
+  }
+  return { startDate: toISO(s), endDate: toISO(e) }
+}
+
+function formatDateRange(startDate: string, endDate: string): string {
+  const s = new Date(startDate + 'T00:00:00')
+  const e = new Date(endDate + 'T00:00:00')
+  const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' }
+  const sStr = s.toLocaleDateString('en-US', opts)
+  const eStr = e.toLocaleDateString('en-US', { ...opts, year: 'numeric' })
+  if (startDate === endDate) return eStr
+  if (s.getFullYear() === e.getFullYear() && s.getMonth() === e.getMonth()) {
+    return `${s.toLocaleDateString('en-US', { month: 'short' })} ${s.getDate()} - ${e.getDate()}, ${e.getFullYear()}`
+  }
+  if (s.getFullYear() === e.getFullYear()) return `${sStr} - ${eStr}`
+  return `${s.toLocaleDateString('en-US', { ...opts, year: 'numeric' })} - ${eStr}`
+}
+
+function aggregateEntries(entries: DailyEntry[], granularity: Granularity): DailyEntry[] {
+  if (granularity === 'daily') return entries
+  const bucketKey = (dateStr: string) => {
+    const d = new Date(dateStr + 'T00:00:00')
+    if (granularity === 'weekly') {
+      const day = d.getDay() || 7
+      const mon = new Date(d)
+      mon.setDate(d.getDate() - day + 1)
+      return mon.toISOString().slice(0, 10)
+    }
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
+  }
+  const buckets = new Map<string, DailyEntry[]>()
+  for (const e of entries) {
+    const key = bucketKey(e.date)
+    const list = buckets.get(key) || []
+    list.push(e)
+    buckets.set(key, list)
+  }
+  return Array.from(buckets.entries()).map(([key, group]) => {
+    const merged: DailyEntry = {
+      id: `agg-${key}`, date: key, platform: group[0].platform,
+      gross_revenue: 0, refunds: 0, num_orders: 0, platform_fee: 0,
+      commissions: 0, gmv_max_ad_spend: 0, ad_spend: 0, ad_spend_pct: 0,
+      postage_pick_pack: 0, pick_pack: 0, shipping_fee: 0, key_changes: null,
+    }
+    for (const e of group) {
+      merged.gross_revenue += e.gross_revenue; merged.refunds += e.refunds
+      merged.num_orders += e.num_orders; merged.platform_fee += e.platform_fee
+      merged.commissions += e.commissions; merged.gmv_max_ad_spend += e.gmv_max_ad_spend
+      merged.ad_spend += e.ad_spend; merged.postage_pick_pack += e.postage_pick_pack
+      merged.shipping_fee += (e.shipping_fee || 0)
+    }
+    return merged
+  }).sort((a, b) => b.date.localeCompare(a.date))
+}
+
+// ── Dropdown Component ─────────────────────────────────────────────
+function Dropdown<T extends string>({ value, options, onChange, className = '' }: {
+  value: T; options: { key: T; label: string }[]; onChange: (v: T) => void; className?: string
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+  const selected = options.find(o => o.key === value)
+  return (
+    <div ref={ref} className={`relative ${className}`}>
+      <button onClick={() => setOpen(!open)}
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 border border-white/10 text-gray-300 hover:text-white hover:border-white/20 transition whitespace-nowrap">
+        {selected?.label || value}
+        <ChevronDown size={12} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div className="absolute top-full left-0 mt-1 z-50 min-w-[180px] rounded-xl py-1 shadow-2xl animate-in fade-in slide-in-from-top-1 duration-150"
+          style={{ background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.1)' }}>
+          {options.map(o => (
+            <button key={o.key} onClick={() => { onChange(o.key); setOpen(false) }}
+              className={`w-full px-3 py-2 text-left text-xs transition ${o.key === value ? 'text-[#F24822] bg-[#F24822]/10' : 'text-gray-300 hover:bg-white/5 hover:text-white'}`}>
+              {o.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 interface CellAddr {
   rowIdx: number
@@ -309,9 +442,13 @@ export default function BiblePage() {
   const supabase = createClient()
   const [userId, setUserId] = useState<string | null>(null)
   const [platform, setPlatform] = useState<Platform>('tiktok_shop')
-  const [dateRange, setDateRange] = useState<DateRange>('30d')
+  const [datePreset, setDatePreset] = useState<DatePreset>('7d')
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
+  const [granularity, setGranularity] = useState<Granularity>('daily')
+  const [comparisonPeriod, setComparisonPeriod] = useState<ComparisonPeriod>('none')
+  const [productFilter, setProductFilter] = useState<string>('all')
+  const [showDatePicker, setShowDatePicker] = useState(false)
   const [products, setProducts] = useState<Product[]>([])
   const [entries, setEntries] = useState<DailyEntry[]>([])
   const [allUnits, setAllUnits] = useState<ProductUnits[]>([])
@@ -375,15 +512,7 @@ export default function BiblePage() {
   }, [supabase])
 
   // ── Date range calc (moved up so poll can reference it) ──
-  const { startDate, endDate } = useMemo(() => {
-    const now = new Date()
-    let s: Date, e: Date = now
-    if (dateRange === '7d') { s = new Date(now); s.setDate(s.getDate() - 6) }
-    else if (dateRange === '30d') { s = new Date(now); s.setDate(s.getDate() - 29) }
-    else if (dateRange === 'month') { s = new Date(now.getFullYear(), now.getMonth(), 1) }
-    else { s = customFrom ? new Date(customFrom) : new Date(now.getFullYear(), now.getMonth(), 1); e = customTo ? new Date(customTo) : now }
-    return { startDate: s.toISOString().slice(0, 10), endDate: e.toISOString().slice(0, 10) }
-  }, [dateRange, customFrom, customTo])
+  const { startDate, endDate } = useMemo(() => computeDateRange(datePreset, customFrom, customTo), [datePreset, customFrom, customTo])
 
   // Poll sync progress — works for both new syncs and resumed syncs after page refresh
   const pollSyncProgress = useCallback(async () => {
@@ -513,9 +642,18 @@ export default function BiblePage() {
   useEffect(() => { loadData() }, [loadData])
 
   // ── Editable column keys ──
+  // ── Aggregated entries (for weekly/monthly granularity) ──
+  const displayEntries = useMemo(() => aggregateEntries(entries, granularity), [entries, granularity])
+  const isAggregated = granularity !== 'daily'
+
+  // ── Filtered products ──
+  const filteredProducts = useMemo(() =>
+    productFilter === 'all' ? products : products.filter(p => p.id === productFilter)
+  , [products, productFilter])
+
   const editableColKeys = useMemo(() => {
     const keys: string[] = ['gross_revenue', 'refunds', 'num_orders']
-    products.forEach(p => {
+    filteredProducts.forEach(p => {
       const hasVariants = p.variants && p.variants.length > 0
       if (hasVariants) {
         p.variants!.forEach(v => keys.push(`vunits_${v.id}`))
@@ -525,7 +663,7 @@ export default function BiblePage() {
     })
     keys.push('commissions', 'ad_spend', 'shipping_fee', 'postage_pick_pack', 'key_changes')
     return keys
-  }, [products, expandedProducts])
+  }, [filteredProducts, expandedProducts])
 
   const cellKey = (rowIdx: number, colKey: string) => `${rowIdx}:${colKey}`
 
@@ -723,7 +861,7 @@ export default function BiblePage() {
       platform_fee: 0, commissions: 0, ad_spend: 0,
       product_cost: 0, shipping_fee: 0, postage_pick_pack: 0, pick_pack: 0, profit: 0,
     }
-    entries.forEach(e => {
+    displayEntries.forEach(e => {
       t.gross_revenue += e.gross_revenue; t.refunds += e.refunds; t.num_orders += e.num_orders
       t.total_units += getTotalUnits(e.id); t.platform_fee += e.platform_fee; t.commissions += e.commissions
       t.ad_spend += getAdSpend(e); t.product_cost += getProductCost(e.id)
@@ -732,18 +870,24 @@ export default function BiblePage() {
     })
     return t
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entries, allUnits, allVariantUnits, products, settings])
+  }, [displayEntries, allUnits, allVariantUnits, products, settings])
 
   // ── Chart data — revenue vs total costs vs net profit ──
-  const chartData = useMemo(() =>
-    [...entries].reverse().map(e => ({
-      date: e.date.slice(5),
+  const chartData = useMemo(() => {
+    const fmtLabel = (d: string) => {
+      if (granularity === 'monthly') return new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
+      if (granularity === 'weekly') return `W ${new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+      return d.slice(5)
+    }
+    return [...displayEntries].reverse().map(e => ({
+      date: fmtLabel(e.date),
       Revenue: e.gross_revenue,
       Costs: e.gross_revenue - getProfit(e),
       Profit: getProfit(e),
     }))
+  }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  , [entries, allUnits, allVariantUnits, products, settings])
+  , [displayEntries, allUnits, allVariantUnits, products, settings, granularity])
 
   const cs = getCurrencySymbol(settings)
 
@@ -769,15 +913,16 @@ export default function BiblePage() {
   }, [])
 
   const handleCellClick = useCallback((rowIdx: number, colKey: string, e: React.MouseEvent<HTMLTableCellElement>) => {
+    if (isAggregated) return // Don't allow editing aggregated rows
     startEditRef.current(rowIdx, colKey, e.currentTarget)
-  }, [])
+  }, [isAggregated])
 
   const isCellEditing = (rowIdx: number, colKey: string) =>
     editingCell?.rowIdx === rowIdx && editingCell?.colKey === colKey
 
   // ── Count total header columns for colSpan ──
   // Count product columns: products with variants show variant cols only, others show 1 col
-  const productColCount = products.reduce((s, p) => {
+  const productColCount = filteredProducts.reduce((s, p) => {
     const hasVariants = p.variants && p.variants.length > 0
     return s + (hasVariants ? p.variants!.length : 1)
   }, 0)
@@ -786,47 +931,70 @@ export default function BiblePage() {
   return (
     <div className="p-4 md:p-8 max-w-[1800px] mx-auto">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-3"><span className="text-3xl">📖</span> The Bible</h1>
-          <p className="text-sm text-gray-500 mt-1">Daily Sales & P&L Tracker</p>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          {([
-            { key: '7d' as DateRange, label: '7 Days' },
-            { key: '30d' as DateRange, label: '30 Days' },
-            { key: 'month' as DateRange, label: 'This Month' },
-            { key: 'custom' as DateRange, label: 'Custom' },
-          ]).map(r => (
-            <button key={r.key} onClick={() => setDateRange(r.key)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${dateRange === r.key ? 'bg-[#F24822]/20 text-[#F24822] border border-[#F24822]/30' : 'bg-white/5 text-gray-400 border border-white/10 hover:text-white'}`}>
-              {r.label}
-            </button>
-          ))}
-          {dateRange === 'custom' && (
-            <div className="flex items-center gap-2">
-              <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)} className="bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white" />
-              <span className="text-gray-500 text-xs">→</span>
-              <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)} className="bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white" />
-            </div>
-          )}
-          {platform === 'tiktok_shop' && tiktokConnection && (
-            <button onClick={handleTikTokSync} disabled={tiktokSyncing}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ml-1 disabled:opacity-50"
-              style={{ background: 'rgba(242,72,34,0.12)', border: '1px solid rgba(242,72,34,0.2)', color: '#F24822' }}>
-              {tiktokSyncing ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
-              Sync TikTok
-            </button>
-          )}
-          {platform === 'tiktok_shop' && !tiktokConnection && !loading && (
-            <Link href="/dashboard/integrations" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-gray-500 hover:text-gray-300 bg-white/5 border border-white/10 hover:border-white/20 transition ml-1">
-              <Plug size={12} /> Connect TikTok
-            </Link>
-          )}
-          <button onClick={() => setShowSettings(true)} className="p-2 rounded-lg bg-white/5 border border-white/10 text-gray-400 hover:text-white hover:border-white/20 transition ml-1" title="Bible Settings">
-            <Settings size={14} />
+      <div className="flex items-center justify-between gap-4 mb-4">
+        <h1 className="text-2xl font-bold text-white flex items-center gap-3"><span className="text-3xl">📖</span> The Bible</h1>
+        <button onClick={() => setShowSettings(true)} className="p-2 rounded-lg bg-white/5 border border-white/10 text-gray-400 hover:text-white hover:border-white/20 transition" title="Bible Settings">
+          <Settings size={14} />
+        </button>
+      </div>
+
+      {/* Whop-style filter bar */}
+      <div className="flex items-center gap-2 flex-wrap mb-4 px-3 py-2.5 rounded-xl" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+        {/* Date preset dropdown */}
+        <Dropdown value={datePreset} options={DATE_PRESETS} onChange={(v) => setDatePreset(v)} />
+
+        {/* Resolved date range with calendar icon */}
+        <button onClick={() => setDatePreset('custom')}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-white/5 border border-white/10 text-gray-300 hover:text-white hover:border-white/20 transition whitespace-nowrap">
+          <Calendar size={12} className="text-gray-500" />
+          <span>{formatDateRange(startDate, endDate)}</span>
+        </button>
+
+        {/* Custom date inputs (only when custom preset active) */}
+        {datePreset === 'custom' && (
+          <div className="flex items-center gap-1.5">
+            <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)}
+              className="bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-[#F24822]/50 transition [color-scheme:dark]" />
+            <span className="text-gray-600 text-xs">→</span>
+            <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)}
+              className="bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-[#F24822]/50 transition [color-scheme:dark]" />
+          </div>
+        )}
+
+        <div className="w-px h-5 bg-white/10 mx-1" />
+
+        {/* Compared to dropdown */}
+        <Dropdown value={comparisonPeriod} options={COMPARISON_OPTIONS} onChange={setComparisonPeriod} />
+
+        <div className="w-px h-5 bg-white/10 mx-1" />
+
+        {/* Granularity dropdown */}
+        <Dropdown value={granularity} options={GRANULARITIES} onChange={setGranularity} />
+
+        <div className="w-px h-5 bg-white/10 mx-1" />
+
+        {/* Product filter dropdown */}
+        <Dropdown
+          value={productFilter}
+          options={[{ key: 'all', label: 'All products' }, ...products.map(p => ({ key: p.id, label: p.name }))]}
+          onChange={setProductFilter}
+        />
+
+        {/* Spacer + Sync TikTok button */}
+        <div className="flex-1" />
+        {platform === 'tiktok_shop' && tiktokConnection && (
+          <button onClick={handleTikTokSync} disabled={tiktokSyncing}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all disabled:opacity-50"
+            style={{ background: 'rgba(242,72,34,0.12)', border: '1px solid rgba(242,72,34,0.2)', color: '#F24822' }}>
+            {tiktokSyncing ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+            Sync TikTok
           </button>
-        </div>
+        )}
+        {platform === 'tiktok_shop' && !tiktokConnection && !loading && (
+          <Link href="/dashboard/integrations" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-gray-500 hover:text-gray-300 bg-white/5 border border-white/10 hover:border-white/20 transition">
+            <Plug size={12} /> Connect TikTok
+          </Link>
+        )}
       </div>
       {/* Sync status bar — fixed height so layout doesn't shift */}
       <div className="h-6 flex items-center">
@@ -945,7 +1113,7 @@ export default function BiblePage() {
                     <th className="px-3 py-3 text-right font-medium align-bottom whitespace-nowrap">Gross Rev</th>
                     <th className="px-3 py-3 text-right font-medium align-bottom">Refunds</th>
                     <th className="px-3 py-3 text-right font-medium align-bottom whitespace-nowrap"># Orders</th>
-                    {products.map(p => {
+                    {filteredProducts.map(p => {
                       const hasVariants = p.variants && p.variants.length > 0
                       return (
                         <React.Fragment key={p.id}>
@@ -986,11 +1154,11 @@ export default function BiblePage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {entries.length === 0 ? (
+                  {displayEntries.length === 0 ? (
                     <tr><td colSpan={totalCols} className="px-3 py-16 text-center text-gray-500 text-sm">No entries yet. Click <span className="text-white font-medium">+</span> below to add your first day.</td></tr>
                   ) : (
                     <>
-                      {entries.map((e, rowIdx) => {
+                      {displayEntries.map((e, rowIdx) => {
                         const profit = getProfit(e)
                         const profitPct = getProfitPct(e)
                         const profitColor = profit >= 0 ? 'text-green-400' : 'text-red-400'
@@ -1014,12 +1182,14 @@ export default function BiblePage() {
                         return (
                           <tr key={e.id} className="border-t border-white/[0.04] transition-colors duration-100">
                             <td className="px-3 py-2 text-sm font-medium sticky left-0 z-10 whitespace-nowrap" style={{ background: '#141414' }}>
-                              <span className="text-white">{fmtDate(e.date)}</span>
+                              <span className="text-white">
+                                {granularity === 'weekly' ? `W/C ${fmtDate(e.date)}` : granularity === 'monthly' ? new Date(e.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : fmtDate(e.date)}
+                              </span>
                             </td>
                             {EC('gross_revenue', e.gross_revenue)}
                             {EC('refunds', e.refunds)}
                             {EC('num_orders', e.num_orders)}
-                            {products.map(p => {
+                            {filteredProducts.map(p => {
                               const hasVariants = p.variants && p.variants.length > 0
                               return (
                                 <React.Fragment key={p.id}>
@@ -1067,17 +1237,17 @@ export default function BiblePage() {
                         <td className="px-3 py-3 text-sm text-right tabular-nums text-white">{cs}{fmt(totals.gross_revenue)}</td>
                         <td className="px-3 py-3 text-sm text-right tabular-nums text-white">{cs}{fmt(totals.refunds)}</td>
                         <td className="px-3 py-3 text-sm text-right tabular-nums text-white">{totals.num_orders}</td>
-                        {products.map(p => {
+                        {filteredProducts.map(p => {
                           const hasVariants = p.variants && p.variants.length > 0
                           return (
                             <React.Fragment key={p.id}>
                               {hasVariants ? (
                                 p.variants!.map(v => {
-                                  const vTotal = entries.reduce((s, e) => s + getVariantUnitsForEntry(e.id, v.id), 0)
+                                  const vTotal = displayEntries.reduce((s, e) => s + getVariantUnitsForEntry(e.id, v.id), 0)
                                   return <td key={v.id} className="px-2 py-3 text-sm text-right tabular-nums text-purple-300/70" style={{ background: 'rgba(155,14,229,0.04)' }}>{vTotal}</td>
                                 })
                               ) : (
-                                <td className="px-3 py-3 text-sm text-right tabular-nums text-white">{entries.reduce((s, e) => s + getUnitsForEntry(e.id, p.id), 0)}</td>
+                                <td className="px-3 py-3 text-sm text-right tabular-nums text-white">{displayEntries.reduce((s, e) => s + getUnitsForEntry(e.id, p.id), 0)}</td>
                               )}
                             </React.Fragment>
                           )
