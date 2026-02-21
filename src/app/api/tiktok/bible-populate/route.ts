@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
     const { data: { user } } = await supabaseAuth.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const { connectionId, startDate, endDate, platformFeePercent = 9 } = await request.json()
+    const { connectionId, startDate, endDate, platformFeePercent = 9, commissionRate = 0, postagePerOrder = 0 } = await request.json()
     if (!connectionId) return NextResponse.json({ error: 'connectionId required' }, { status: 400 })
 
     const supabase = getServiceClient()
@@ -222,7 +222,11 @@ export async function POST(request: NextRequest) {
       const settlement = settlementByDate.get(date)
 
       const platformFee = settlement ? settlement.platform_fee : estimatedPlatformFee
-      const commissions = settlement ? settlement.affiliate_commission : day.commissions
+      // Use settlement data if available, then affiliate order data, then estimate from configured rate
+      const commissions = settlement ? settlement.affiliate_commission
+        : (day.commissions > 0 ? day.commissions : (commissionRate > 0 ? day.gross_revenue * (commissionRate / 100) : 0))
+      // Estimate postage from configured per-order rate
+      const postage = postagePerOrder > 0 ? day.num_orders * postagePerOrder : 0
 
       let matchPct = 50
       if (settlement) matchPct = 100
@@ -238,16 +242,20 @@ export async function POST(request: NextRequest) {
 
       let entryId: string
       if (existing) {
+        // Build update payload — only include postage if rate is configured (don't overwrite manual entries)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const updatePayload: Record<string, any> = {
+          gross_revenue: day.gross_revenue,
+          refunds: day.refunds,
+          num_orders: day.num_orders,
+          platform_fee: platformFee,
+          commissions,
+          shipping_fee: day.shipping_fee,
+        }
+        if (postagePerOrder > 0) updatePayload.postage_pick_pack = postage
         await supabase
           .from('bible_daily_entries')
-          .update({
-            gross_revenue: day.gross_revenue,
-            refunds: day.refunds,
-            num_orders: day.num_orders,
-            platform_fee: platformFee,
-            commissions,
-            shipping_fee: day.shipping_fee,
-          })
+          .update(updatePayload)
           .eq('id', existing.id)
         entryId = existing.id
       } else {
@@ -266,7 +274,7 @@ export async function POST(request: NextRequest) {
             gmv_max_ad_spend: 0,
             ad_spend: 0,
             ad_spend_pct: 0,
-            postage_pick_pack: 0,
+            postage_pick_pack: postage,
             pick_pack: 0,
           })
           .select('id')

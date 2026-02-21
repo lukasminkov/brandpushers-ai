@@ -74,6 +74,8 @@ interface BibleSettings {
   shopify_fee: number
   currency: string
   pick_pack_rate: number
+  commission_rate: number
+  postage_per_order: number
 }
 
 const CURRENCIES: { code: string; symbol: string; label: string }[] = [
@@ -239,6 +241,8 @@ const DEFAULT_SETTINGS: BibleSettings = {
   shopify_fee: 2.9,
   currency: 'USD',
   pick_pack_rate: 0,
+  commission_rate: 0,
+  postage_per_order: 0,
 }
 
 const getCurrencySymbol = (settings: BibleSettings) =>
@@ -387,6 +391,8 @@ function SettingsModal({ settings, onSave, onClose }: {
   const [sh, setSh] = useState(settings.shopify_fee)
   const [cur, setCur] = useState(settings.currency || 'USD')
   const [ppr, setPpr] = useState(settings.pick_pack_rate || 0)
+  const [cr, setCr] = useState(settings.commission_rate || 0)
+  const [ppo, setPpo] = useState(settings.postage_per_order || 0)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
@@ -424,9 +430,24 @@ function SettingsModal({ settings, onSave, onClose }: {
               className="w-full px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm text-white text-right focus:outline-none focus:border-[#F24822]/50 transition [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
             <p className="text-[10px] text-gray-600 mt-1">Auto-calculated from total units × rate</p>
           </div>
+          <div>
+            <label className="block text-xs text-gray-400 mb-1.5">Avg. Commission Rate (affiliate + platform)</label>
+            <div className="flex items-center gap-2">
+              <input type="number" step="0.1" value={cr} onChange={e => setCr(parseFloat(e.target.value) || 0)}
+                className="flex-1 px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm text-white text-right focus:outline-none focus:border-[#F24822]/50 transition [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+              <span className="text-sm text-gray-400 font-medium">%</span>
+            </div>
+            <p className="text-[10px] text-gray-600 mt-1">Auto-fills Commissions on sync (affiliate + creator commissions)</p>
+          </div>
+          <div>
+            <label className="block text-xs text-gray-400 mb-1.5">Avg. Postage Cost (per order)</label>
+            <input type="number" step="0.01" value={ppo} onChange={e => setPpo(parseFloat(e.target.value) || 0)}
+              className="w-full px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm text-white text-right focus:outline-none focus:border-[#F24822]/50 transition [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+            <p className="text-[10px] text-gray-600 mt-1">Auto-fills Postage on sync (shipping label cost per order)</p>
+          </div>
         </div>
         <div className="flex justify-end mt-6">
-          <button onClick={() => onSave({ tiktok_shop_fee: ts, amazon_fee: am, shopify_fee: sh, currency: cur, pick_pack_rate: ppr })}
+          <button onClick={() => onSave({ tiktok_shop_fee: ts, amazon_fee: am, shopify_fee: sh, currency: cur, pick_pack_rate: ppr, commission_rate: cr, postage_per_order: ppo })}
             className="px-5 py-2.5 rounded-xl text-sm font-medium text-white transition hover:opacity-90"
             style={{ background: 'linear-gradient(135deg, #9B0EE5, #F24822)' }}>
             Save Settings
@@ -543,7 +564,7 @@ export default function BiblePage() {
     try {
       const populateRes = await fetch('/api/tiktok/bible-populate', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ connectionId: tiktokConnection.id, startDate, endDate, platformFeePercent: settings.tiktok_shop_fee }),
+        body: JSON.stringify({ connectionId: tiktokConnection.id, startDate, endDate, platformFeePercent: settings.tiktok_shop_fee, commissionRate: settings.commission_rate || 0, postagePerOrder: settings.postage_per_order || 0 }),
       })
       const popData = await populateRes.json()
       if (!popData.success) throw new Error(popData.error || 'Populate failed')
