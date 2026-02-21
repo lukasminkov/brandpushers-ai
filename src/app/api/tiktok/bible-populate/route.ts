@@ -250,37 +250,17 @@ export async function POST(request: NextRequest) {
       const settlement = settlementByDate.get(date)
       const hasRealCommissions = day.commissions_from_api > 0
 
-      // Platform fee: REAL from statement transactions > settlement > estimate
-      let platformFee: number
-      if (hasRealCommissions) {
-        platformFee = day.platform_commission + day.transaction_fee // platform_commission + payment processing fee
-      } else if (settlement) {
-        platformFee = settlement.platform_fee
-      } else {
-        platformFee = day.gross_revenue * (platformFeePercent / 100) // fallback estimate
-      }
+      // Platform fee: always use configured rate (TikTok finance API is not accessible with current app scopes)
+      const platformFee = day.gross_revenue * (platformFeePercent / 100)
 
-      // Affiliate/creator commissions: REAL from statement transactions > settlement > affiliate orders > estimate
-      let commissions: number
-      if (hasRealCommissions) {
-        commissions = day.affiliate_commission
-      } else if (settlement) {
-        commissions = settlement.affiliate_commission
-      } else if (day.affiliate_commission > 0) {
-        commissions = day.affiliate_commission // from affiliate_orders table
-      } else if (commissionRate > 0) {
-        commissions = day.gross_revenue * (commissionRate / 100) // last resort estimate
-      } else {
-        commissions = 0
-      }
+      // Commissions: use configured rate × gross revenue
+      // TikTok affiliate/finance API endpoints require scopes our app doesn't have
+      const commissions = commissionRate > 0 ? day.gross_revenue * (commissionRate / 100) : 0
 
-      // Estimate postage from configured per-order rate
+      // Postage: use configured per-order rate × number of orders
       const postage = postagePerOrder > 0 ? day.num_orders * postagePerOrder : 0
 
-      // Match percentage: 100% if real API data, 75% if settlement, 50% if estimated
-      let matchPct = 50
-      if (hasRealCommissions) matchPct = 100
-      else if (settlement) matchPct = 90
+      const matchPct = 80 // rate-based calculation
 
       // Upsert Bible daily entry
       const { data: existing } = await supabase
@@ -381,11 +361,13 @@ export async function POST(request: NextRequest) {
             gross_revenue: day.gross_revenue,
             platform_fee: platformFee,
             commissions,
-            source: hasRealCommissions ? 'statement_transactions' : (settlement ? 'settlement' : 'estimated'),
-            orders_with_real_commissions: day.commissions_from_api,
+            postage,
+            source: 'configured_rates',
+            commission_rate_pct: commissionRate,
+            postage_per_order: postagePerOrder,
             total_orders: day.num_orders,
           },
-          settled_data: settlement || null,
+          settled_data: null,
           match_percentage: matchPct,
           synced_at: new Date().toISOString(),
         }, { onConflict: 'user_id,sync_date,platform' })

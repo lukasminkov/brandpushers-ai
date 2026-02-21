@@ -431,19 +431,19 @@ function SettingsModal({ settings, onSave, onClose }: {
             <p className="text-[10px] text-gray-600 mt-1">Auto-calculated from total units × rate</p>
           </div>
           <div>
-            <label className="block text-xs text-gray-400 mb-1.5">Commission Rate % (fallback — real data pulled from API)</label>
+            <label className="block text-xs text-gray-400 mb-1.5">Commission Rate % (applied to gross revenue on sync)</label>
             <div className="flex items-center gap-2">
               <input type="number" step="0.1" value={cr} onChange={e => setCr(parseFloat(e.target.value) || 0)}
                 className="flex-1 px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm text-white text-right focus:outline-none focus:border-[#F24822]/50 transition [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
               <span className="text-sm text-gray-400 font-medium">%</span>
             </div>
-            <p className="text-[10px] text-gray-600 mt-1">Auto-fills Commissions on sync (affiliate + creator commissions)</p>
+            <p className="text-[10px] text-gray-600 mt-1">Commissions = rate % × gross revenue per day</p>
           </div>
           <div>
             <label className="block text-xs text-gray-400 mb-1.5">Avg. Postage Cost (per order)</label>
             <input type="number" step="0.01" value={ppo} onChange={e => setPpo(parseFloat(e.target.value) || 0)}
               className="w-full px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm text-white text-right focus:outline-none focus:border-[#F24822]/50 transition [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
-            <p className="text-[10px] text-gray-600 mt-1">Auto-fills Postage on sync (shipping label cost per order)</p>
+            <p className="text-[10px] text-gray-600 mt-1">Postage = rate × number of orders per day</p>
           </div>
         </div>
         <div className="flex justify-end mt-6">
@@ -682,7 +682,7 @@ export default function BiblePage() {
         keys.push(`units_${p.id}`)
       }
     })
-    keys.push('commissions', 'ad_spend', 'shipping_fee', 'postage_pick_pack', 'key_changes')
+    keys.push('commissions', 'ad_spend', 'postage_pick_pack', 'key_changes')
     return keys
   }, [filteredProducts, expandedProducts])
 
@@ -867,7 +867,7 @@ export default function BiblePage() {
   const getProfit = (e: DailyEntry) => {
     const pc = getProductCost(e.id)
     const pp = getPickPackCost(e.id)
-    return e.gross_revenue - e.refunds - e.platform_fee - e.commissions - getAdSpend(e) - pc - (e.shipping_fee || 0) - e.postage_pick_pack - pp
+    return e.gross_revenue - e.refunds - e.platform_fee - e.commissions - getAdSpend(e) - pc - e.postage_pick_pack - pp
   }
 
   const getAdSpendPct = (e: DailyEntry) => e.gross_revenue > 0 ? (getAdSpend(e) / e.gross_revenue) * 100 : 0
@@ -880,13 +880,13 @@ export default function BiblePage() {
     const t = {
       gross_revenue: 0, refunds: 0, num_orders: 0, total_units: 0,
       platform_fee: 0, commissions: 0, ad_spend: 0,
-      product_cost: 0, shipping_fee: 0, postage_pick_pack: 0, pick_pack: 0, profit: 0,
+      product_cost: 0, postage_pick_pack: 0, pick_pack: 0, profit: 0,
     }
     displayEntries.forEach(e => {
       t.gross_revenue += e.gross_revenue; t.refunds += e.refunds; t.num_orders += e.num_orders
       t.total_units += getTotalUnits(e.id); t.platform_fee += e.platform_fee; t.commissions += e.commissions
       t.ad_spend += getAdSpend(e); t.product_cost += getProductCost(e.id)
-      t.shipping_fee += (e.shipping_fee || 0); t.postage_pick_pack += e.postage_pick_pack
+      t.postage_pick_pack += e.postage_pick_pack
       t.pick_pack += getPickPackCost(e.id); t.profit += getProfit(e)
     })
     return t
@@ -947,7 +947,7 @@ export default function BiblePage() {
     const hasVariants = p.variants && p.variants.length > 0
     return s + (hasVariants ? p.variants!.length : 1)
   }, 0)
-  const totalCols = 17 + productColCount
+  const totalCols = 16 + productColCount
 
   return (
     <div className="p-4 md:p-8 max-w-[1800px] mx-auto">
@@ -1166,7 +1166,6 @@ export default function BiblePage() {
                     <th className="px-3 py-3 text-right font-medium align-bottom whitespace-nowrap text-amber-400" title="Manual entry — TikTok Shop API does not expose GMV Max ad spend">Ad Spend ✏️</th>
                     <th className="px-3 py-3 text-right font-medium align-bottom whitespace-nowrap">Ad %</th>
                     <th className="px-3 py-3 text-right font-medium align-bottom whitespace-nowrap">COGS</th>
-                    <th className="px-3 py-3 text-right font-medium align-bottom whitespace-nowrap">Shipping</th>
                     <th className="px-3 py-3 text-right font-medium align-bottom whitespace-nowrap">Postage</th>
                     <th className="px-3 py-3 text-right font-medium align-bottom whitespace-nowrap">Pick&Pack</th>
                     <th className="px-3 py-3 text-right font-medium align-bottom whitespace-nowrap">Net P/L</th>
@@ -1240,7 +1239,6 @@ export default function BiblePage() {
                             {EC('ad_spend', getAdSpend(e))}
                             <CalcCell value={fmtPct(getAdSpendPct(e))} />
                             <CalcCell value={getProductCost(e.id)} prefix={cs} />
-                            {EC('shipping_fee', e.shipping_fee || 0)}
                             {EC('postage_pick_pack', e.postage_pick_pack)}
                             <CalcCell value={getPickPackCost(e.id)} prefix={cs} />
                             <td className={`px-3 py-2 text-sm text-right border-r border-white/[0.04] bg-white/[0.015] font-bold tabular-nums ${profitColor}`}>
@@ -1283,7 +1281,6 @@ export default function BiblePage() {
                           {fmtPct(totals.gross_revenue > 0 ? (totals.ad_spend / totals.gross_revenue) * 100 : 0)}
                         </td>
                         <td className="px-3 py-3 text-sm text-right tabular-nums text-gray-400 bg-white/[0.015]">{cs}{fmt(totals.product_cost)}</td>
-                        <td className="px-3 py-3 text-sm text-right tabular-nums text-white">{cs}{fmt(totals.shipping_fee)}</td>
                         <td className="px-3 py-3 text-sm text-right tabular-nums text-white">{cs}{fmt(totals.postage_pick_pack)}</td>
                         <td className="px-3 py-3 text-sm text-right tabular-nums text-gray-400 bg-white/[0.015]">{cs}{fmt(totals.pick_pack)}</td>
                         <td className={`px-3 py-3 text-sm text-right tabular-nums font-bold bg-white/[0.015] ${totals.profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
