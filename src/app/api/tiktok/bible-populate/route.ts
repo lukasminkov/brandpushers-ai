@@ -148,11 +148,21 @@ export async function POST(request: NextRequest) {
       gross_revenue: number // GMV = sum of line item prices
       refunds: number
       num_orders: number
-      commissions: number
+      platform_commission: number // REAL from statement transactions
+      affiliate_commission: number // REAL from statement transactions
+      transaction_fee: number // REAL from statement transactions
+      commissions_from_api: number // count of orders with real commission data
       shipping_fee: number
       productUnits: Map<string, number>
       variantUnits: Map<string, number>
     }>()
+
+    const newDay = () => ({
+      gross_revenue: 0, refunds: 0, num_orders: 0,
+      platform_commission: 0, affiliate_commission: 0, transaction_fee: 0,
+      commissions_from_api: 0, shipping_fee: 0,
+      productUnits: new Map<string, number>(), variantUnits: new Map<string, number>(),
+    })
 
     // TikTok order statuses to exclude from order count and GMV
     const CANCELLED_STATUSES = new Set(['CANCELLED', 'CANCEL', 'cancelled', 'cancel'])
@@ -165,9 +175,7 @@ export async function POST(request: NextRequest) {
 
       // Convert order time to shop timezone for date grouping
       const date = toDateInTimezone(order.order_create_time, timezone)
-      if (!dailyMap.has(date)) {
-        dailyMap.set(date, { gross_revenue: 0, refunds: 0, num_orders: 0, commissions: 0, shipping_fee: 0, productUnits: new Map(), variantUnits: new Map() })
-      }
+      if (!dailyMap.has(date)) dailyMap.set(date, newDay())
       const day = dailyMap.get(date)!
 
       // Use GMV (sum of line item prices) instead of total_amount
@@ -175,6 +183,15 @@ export async function POST(request: NextRequest) {
       day.refunds += parseFloat(order.refund_amount || 0)
       day.shipping_fee += parseFloat(order.shipping_fee || 0)
       day.num_orders += 1
+
+      // REAL commission data from TikTok Finance Statement Transactions API
+      // These fields are populated by the sync route from /finance/202309/statement_transactions/search
+      if (order.commission_synced) {
+        day.platform_commission += parseFloat(order.platform_commission || 0)
+        day.affiliate_commission += parseFloat(order.affiliate_commission || 0)
+        day.transaction_fee += parseFloat(order.transaction_fee || 0)
+        day.commissions_from_api += 1
+      }
 
       // Product + variant units from order items
       const items = order.items as { product_id?: string; sku_id?: string; quantity?: number }[] || []
@@ -194,13 +211,15 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Add affiliate commissions by day (also timezone-converted)
+    // Fallback: add affiliate commissions from affiliate_orders table (if no statement transaction data)
     for (const aff of affOrders || []) {
       const date = toDateInTimezone(aff.order_create_time, timezone)
-      if (!dailyMap.has(date)) {
-        dailyMap.set(date, { gross_revenue: 0, refunds: 0, num_orders: 0, commissions: 0, shipping_fee: 0, productUnits: new Map(), variantUnits: new Map() })
+      if (!dailyMap.has(date)) dailyMap.set(date, newDay())
+      const day = dailyMap.get(date)!
+      // Only use affiliate_orders data if we don't have statement transaction data for this day
+      if (day.commissions_from_api === 0) {
+        day.affiliate_commission += parseFloat(aff.commission_amount || 0)
       }
-      dailyMap.get(date)!.commissions += parseFloat(aff.commission_amount || 0)
     }
 
     // Build settlement lookup by date for match percentage
@@ -218,18 +237,40 @@ export async function POST(request: NextRequest) {
     let daysUpdated = 0
 
     for (const [date, day] of dailyMap) {
-      const estimatedPlatformFee = day.gross_revenue * (platformFeePercent / 100)
       const settlement = settlementByDate.get(date)
+      const hasRealCommissions = day.commissions_from_api > 0
 
-      const platformFee = settlement ? settlement.platform_fee : estimatedPlatformFee
-      // Use settlement data if available, then affiliate order data, then estimate from configured rate
-      const commissions = settlement ? settlement.affiliate_commission
-        : (day.commissions > 0 ? day.commissions : (commissionRate > 0 ? day.gross_revenue * (commissionRate / 100) : 0))
+      // Platform fee: REAL from statement transactions > settlement > estimate
+      let platformFee: number
+      if (hasRealCommissions) {
+        platformFee = day.platform_commission + day.transaction_fee // platform_commission + payment processing fee
+      } else if (settlement) {
+        platformFee = settlement.platform_fee
+      } else {
+        platformFee = day.gross_revenue * (platformFeePercent / 100) // fallback estimate
+      }
+
+      // Affiliate/creator commissions: REAL from statement transactions > settlement > affiliate orders > estimate
+      let commissions: number
+      if (hasRealCommissions) {
+        commissions = day.affiliate_commission
+      } else if (settlement) {
+        commissions = settlement.affiliate_commission
+      } else if (day.affiliate_commission > 0) {
+        commissions = day.affiliate_commission // from affiliate_orders table
+      } else if (commissionRate > 0) {
+        commissions = day.gross_revenue * (commissionRate / 100) // last resort estimate
+      } else {
+        commissions = 0
+      }
+
       // Estimate postage from configured per-order rate
       const postage = postagePerOrder > 0 ? day.num_orders * postagePerOrder : 0
 
+      // Match percentage: 100% if real API data, 75% if settlement, 50% if estimated
       let matchPct = 50
-      if (settlement) matchPct = 100
+      if (hasRealCommissions) matchPct = 100
+      else if (settlement) matchPct = 90
 
       // Upsert Bible daily entry
       const { data: existing } = await supabase
@@ -328,8 +369,11 @@ export async function POST(request: NextRequest) {
           platform: 'tiktok_shop',
           estimated_data: {
             gross_revenue: day.gross_revenue,
-            platform_fee: estimatedPlatformFee,
-            commissions: day.commissions,
+            platform_fee: platformFee,
+            commissions,
+            source: hasRealCommissions ? 'statement_transactions' : (settlement ? 'settlement' : 'estimated'),
+            orders_with_real_commissions: day.commissions_from_api,
+            total_orders: day.num_orders,
           },
           settled_data: settlement || null,
           match_percentage: matchPct,

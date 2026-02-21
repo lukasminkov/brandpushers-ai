@@ -269,6 +269,55 @@ async function performSync(
       }
     }
 
+    // Sync statement transactions (per-order commission breakdowns from Finance API)
+    if (syncType === 'all' || syncType === 'orders') {
+      try {
+        let allTransactions: Record<string, unknown>[] = []
+        let cursor: string | undefined
+        do {
+          const page = await fetchStatementTransactions(accessToken, shopCipher, startTs, endTs, 100, cursor)
+          allTransactions = allTransactions.concat(page.transactions)
+          cursor = page.nextCursor
+        } while (cursor)
+
+        // Update tiktok_orders with real commission data from statement transactions
+        let commissionsUpdated = 0
+        for (const tx of allTransactions) {
+          const orderId = (tx.order_id || tx.related_order_id || '') as string
+          if (!orderId) continue
+
+          // Statement transactions have per-order financial breakdowns
+          const platformCommission = Math.abs(parseFloat(String(tx.platform_commission || tx.commission || 0)))
+          const affiliateCommission = Math.abs(parseFloat(String(tx.affiliate_commission || tx.affiliate_partner_commission || tx.creator_commission || 0)))
+          const transactionFee = Math.abs(parseFloat(String(tx.transaction_fee || tx.payment_fee || 0)))
+          const settlementAmount = parseFloat(String(tx.settlement_amount || tx.net_amount || tx.total_settlement_amount || 0))
+
+          // Only update if we have meaningful data
+          if (platformCommission > 0 || affiliateCommission > 0 || transactionFee > 0) {
+            await supabase
+              .from('tiktok_orders')
+              .update({
+                platform_commission: platformCommission,
+                affiliate_commission: affiliateCommission,
+                transaction_fee: transactionFee,
+                settlement_amount: settlementAmount,
+                commission_synced: true,
+              })
+              .eq('user_id', userId)
+              .eq('tiktok_order_id', orderId)
+            commissionsUpdated++
+          }
+        }
+
+        results.statement_transactions = allTransactions.length
+        results.commissions_updated = commissionsUpdated
+        console.log(`Statement transactions: ${allTransactions.length} fetched, ${commissionsUpdated} orders updated with real commissions`)
+      } catch (stErr) {
+        console.warn('Statement transaction sync skipped:', stErr)
+        results.statement_transactions = 'skipped'
+      }
+    }
+
     // Sync products
     if (syncType === 'all' || syncType === 'products') {
       let allProducts: Record<string, unknown>[] = []

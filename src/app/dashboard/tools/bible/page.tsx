@@ -431,7 +431,7 @@ function SettingsModal({ settings, onSave, onClose }: {
             <p className="text-[10px] text-gray-600 mt-1">Auto-calculated from total units × rate</p>
           </div>
           <div>
-            <label className="block text-xs text-gray-400 mb-1.5">Avg. Commission Rate (affiliate + platform)</label>
+            <label className="block text-xs text-gray-400 mb-1.5">Commission Rate % (fallback — real data pulled from API)</label>
             <div className="flex items-center gap-2">
               <input type="number" step="0.1" value={cr} onChange={e => setCr(parseFloat(e.target.value) || 0)}
                 className="flex-1 px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm text-white text-right focus:outline-none focus:border-[#F24822]/50 transition [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
