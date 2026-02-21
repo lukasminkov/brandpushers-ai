@@ -1163,7 +1163,7 @@ export default function BiblePage() {
                     <th className="px-3 py-3 text-right font-medium align-bottom whitespace-nowrap">Total Units</th>
                     <th className="px-3 py-3 text-right font-medium align-bottom whitespace-nowrap">Platform Fee</th>
                     <th className="px-3 py-3 text-right font-medium align-bottom">Commissions</th>
-                    <th className="px-3 py-3 text-right font-medium align-bottom whitespace-nowrap">Ad Spend</th>
+                    <th className="px-3 py-3 text-right font-medium align-bottom whitespace-nowrap text-amber-400" title="Manual entry — TikTok Shop API does not expose GMV Max ad spend">Ad Spend ✏️</th>
                     <th className="px-3 py-3 text-right font-medium align-bottom whitespace-nowrap">Ad %</th>
                     <th className="px-3 py-3 text-right font-medium align-bottom whitespace-nowrap">COGS</th>
                     <th className="px-3 py-3 text-right font-medium align-bottom whitespace-nowrap">Shipping</th>
@@ -1186,11 +1186,13 @@ export default function BiblePage() {
 
                         const EC = (colKey: string, value: number | string, isText = false) => {
                           const editing = isCellEditing(rowIdx, colKey)
-                          const display = isText ? (value || '—') : (typeof value === 'number' ? (value === 0 ? '—' : fmt(value)) : String(value))
+                          const isAdSpend = colKey === 'ad_spend'
+                          const isEmpty = typeof value === 'number' && value === 0
+                          const display = isText ? (value || '—') : (isEmpty ? (isAdSpend ? 'enter' : '—') : (typeof value === 'number' ? fmt(value) : String(value)))
                           return (
                             <td key={colKey} ref={registerCell(rowIdx, colKey)} onClick={(ev) => handleCellClick(rowIdx, colKey, ev)}
-                              className={`px-3 py-2 text-sm border-r border-white/[0.04] cursor-pointer transition-colors duration-100 ${isText ? 'text-left' : 'text-right'} ${editing ? 'ring-2 ring-[#F24822]/40 ring-inset' : 'hover:bg-white/[0.04]'}`}>
-                              <span className={`block tabular-nums ${typeof value === 'number' && value === 0 ? 'text-gray-600' : 'text-white'}`}>{display}</span>
+                              className={`px-3 py-2 text-sm border-r border-white/[0.04] cursor-pointer transition-colors duration-100 ${isText ? 'text-left' : 'text-right'} ${editing ? 'ring-2 ring-[#F24822]/40 ring-inset' : 'hover:bg-white/[0.04]'} ${isAdSpend && isEmpty ? 'bg-amber-500/[0.06]' : ''}`}>
+                              <span className={`block tabular-nums ${isEmpty ? (isAdSpend ? 'text-amber-500/50 italic text-xs' : 'text-gray-600') : 'text-white'}`}>{display}</span>
                             </td>
                           )
                         }

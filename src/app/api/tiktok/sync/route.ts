@@ -280,9 +280,28 @@ async function performSync(
           cursor = page.nextCursor
         } while (cursor)
 
+        // Log transaction types/fields to discover ad spend data
+        const txTypes = new Set<string>()
+        const txFieldSample: Record<string, unknown> = {}
+        let adSpendTotal = 0
+
         // Update tiktok_orders with real commission data from statement transactions
         let commissionsUpdated = 0
         for (const tx of allTransactions) {
+          // Track unique statement types for debugging
+          const stType = (tx.statement_type || tx.type || tx.transaction_type || 'unknown') as string
+          txTypes.add(stType)
+          if (!txFieldSample[stType]) txFieldSample[stType] = tx // save one sample per type
+
+          // Check for ad spend / GMV Max deductions in statement transactions
+          // TikTok may include ad charges as negative adjustments or specific transaction types
+          const adKeywords = ['ad', 'gmv_max', 'promotion', 'advertising', 'campaign']
+          const isAdTx = adKeywords.some(k => stType.toLowerCase().includes(k))
+          if (isAdTx) {
+            const amount = Math.abs(parseFloat(String(tx.amount || tx.total_amount || tx.settlement_amount || 0)))
+            adSpendTotal += amount
+          }
+
           const orderId = (tx.order_id || tx.related_order_id || '') as string
           if (!orderId) continue
 
@@ -304,14 +323,23 @@ async function performSync(
                 commission_synced: true,
               })
               .eq('user_id', userId)
-              .eq('tiktok_order_id', orderId)
+              .eq('order_id', orderId)
             commissionsUpdated++
           }
         }
 
         results.statement_transactions = allTransactions.length
         results.commissions_updated = commissionsUpdated
+        results.statement_types = [...txTypes]
+        results.ad_spend_from_statements = adSpendTotal
+        if (Object.keys(txFieldSample).length > 0) {
+          results.statement_sample_fields = Object.fromEntries(
+            Object.entries(txFieldSample).map(([type, sample]) => [type, Object.keys(sample as Record<string, unknown>)])
+          )
+        }
         console.log(`Statement transactions: ${allTransactions.length} fetched, ${commissionsUpdated} orders updated with real commissions`)
+        console.log(`Statement types found:`, [...txTypes])
+        console.log(`Ad spend from statements: ${adSpendTotal}`)
       } catch (stErr) {
         console.warn('Statement transaction sync skipped:', stErr)
         results.statement_transactions = 'skipped'
